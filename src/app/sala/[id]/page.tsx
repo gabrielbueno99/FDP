@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useMultiplayer } from '../../../hooks/useMultiplayer';
 import { useGame } from '../../../hooks/useGame';
 import { GameBoard } from '../../../components/GameBoard';
+import { DisconnectOverlay } from '../../../components/DisconnectOverlay';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -114,17 +115,26 @@ export default function SalaPage({ params }: PageProps) {
 
   if (mp.gameState) {
     return (
-      <GameBoard
-        state={gameState}
-        humanId={mp.myPlayerId ?? 0}
-        forbiddenBid={forbiddenBid}
-        isMyTurn={isMyTurn}
-        onBid={placeBid}
-        onCardPlay={playCard}
-        onNextRound={nextRound}
-        onRestart={() => router.push('/')}
-        isMultiplayer
-      />
+      <>
+        <GameBoard
+          state={gameState}
+          humanId={mp.myPlayerId ?? 0}
+          forbiddenBid={forbiddenBid}
+          isMyTurn={isMyTurn && !mp.disconnectedPlayer}
+          onBid={placeBid}
+          onCardPlay={playCard}
+          onNextRound={nextRound}
+          onRestart={() => router.push('/')}
+          isMultiplayer
+        />
+        {mp.disconnectedPlayer && (
+          <DisconnectOverlay
+            player={mp.disconnectedPlayer}
+            isHost={isHost}
+            onRemove={mp.removeDisconnectedPlayer}
+          />
+        )}
+      </>
     );
   }
 
