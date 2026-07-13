@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #1a0800;
+  --foreground: #fef3c7;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-display: var(--font-playfair);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: system-ui, sans-serif;
+}
+
+.wood-bg {
+  background-color: #2a1204;
+  background-image:
+    repeating-linear-gradient(
+      93deg,
+      transparent 0px,
+      transparent 4px,
+      rgba(0, 0, 0, 0.04) 4px,
+      rgba(0, 0, 0, 0.04) 5px,
+      transparent 5px,
+      transparent 10px,
+      rgba(180, 90, 10, 0.02) 10px,
+      rgba(180, 90, 10, 0.02) 11px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0px,
+      transparent 55px,
+      rgba(0, 0, 0, 0.025) 55px,
+      rgba(0, 0, 0, 0.025) 56px
+    );
+}
+
+.felt-center {
+  background: radial-gradient(ellipse at 50% 40%, #1e5228 0%, #163d1e 55%, #0f2914 100%);
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.55), inset 0 0 25px rgba(0, 0, 0, 0.4);
 }

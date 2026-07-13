@@ -1,0 +1,77 @@
+'use client';
+import { GameState } from '../lib/types';
+
+interface RoundSummaryProps {
+  state: GameState;
+  onNext: () => void;
+  isMultiplayer?: boolean;
+}
+
+export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps) {
+  const { roundResults, players, round, maxRounds } = state;
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-amber-950/95 border-2 border-amber-800/50 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+        <h2 className="font-display font-black text-amber-200 text-2xl text-center mb-1">
+          Fim da Rodada {round}
+        </h2>
+        <p className="text-amber-700/60 text-xs text-center mb-5 uppercase tracking-widest">
+          {round} de {maxRounds} rodadas
+        </p>
+
+        <div className="space-y-2.5 mb-6">
+          {roundResults.map((r) => {
+            const player = players.find((p) => p.id === r.playerId);
+            return (
+              <div
+                key={r.playerId}
+                className={`flex items-center justify-between rounded-xl px-4 py-3 border ${
+                  r.lostPoint
+                    ? 'bg-red-950/50 border-red-800/40'
+                    : 'bg-green-950/50 border-green-800/40'
+                }`}
+              >
+                <div>
+                  <div className="text-amber-100 font-semibold text-sm">{r.name}</div>
+                  <div className="text-amber-700/70 text-xs">
+                    Declarou {r.bid} · Fez {r.tricksWon}
+                  </div>
+                  {r.newlyEliminated && (
+                    <div className="text-red-400 text-xs font-bold mt-0.5">ELIMINADO!</div>
+                  )}
+                </div>
+                <div className="text-right">
+                  {r.lostPoint ? (
+                    <span className="text-red-400 font-bold text-sm">−1 ponto</span>
+                  ) : (
+                    <span className="text-green-400 font-bold text-sm">✓</span>
+                  )}
+                  <div className="flex gap-1 justify-end mt-1.5">
+                    {Array.from({ length: 5 }, (_, i) => (
+                      <div
+                        key={i}
+                        className={`w-2.5 h-2.5 rounded-full border ${
+                          i < (player?.points ?? 0)
+                            ? 'bg-amber-400 border-amber-300'
+                            : 'bg-transparent border-amber-800/30'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={onNext}
+          className="w-full bg-amber-700 hover:bg-amber-600 text-amber-100 font-bold py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg border border-amber-600/50"
+        >
+          {isMultiplayer ? 'Pronto para próxima rodada' : 'Próxima Rodada →'}
+        </button>
+      </div>
+    </div>
+  );
+}

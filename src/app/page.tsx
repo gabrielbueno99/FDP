@@ -1,65 +1,128 @@
-import Image from "next/image";
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useGame } from '../hooks/useGame';
+import { GameBoard } from '../components/GameBoard';
+
+type Screen = 'home' | 'playing';
 
 export default function Home() {
+  const [screen, setScreen] = useState<Screen>('home');
+  const [playerCount, setPlayerCount] = useState(4);
+  const router = useRouter();
+
+  const { state, startGame, placeBid, playCard, nextRound, restart, forbiddenBid, isMyTurn, humanId } =
+    useGame();
+
+  const handleStartSolo = () => {
+    startGame(playerCount, 1);
+    setScreen('playing');
+  };
+
+  const handleRestart = () => {
+    restart();
+    setScreen('home');
+  };
+
+  if (screen === 'playing' && state.phase !== 'setup') {
+    return (
+      <GameBoard
+        state={state}
+        humanId={humanId}
+        forbiddenBid={forbiddenBid}
+        isMyTurn={isMyTurn}
+        onBid={placeBid}
+        onCardPlay={playCard}
+        onNextRound={nextRound}
+        onRestart={handleRestart}
+      />
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="min-h-screen wood-bg flex flex-col items-center justify-center p-6 gap-8">
+      {/* Title */}
+      <div className="text-center space-y-2">
+        <h1 className="font-display font-black text-amber-400 text-8xl tracking-widest drop-shadow-[0_0_24px_rgba(251,191,36,0.25)]">
+          FDP
+        </h1>
+        <div className="h-px w-48 mx-auto bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
+        <p className="text-amber-800/70 text-xs tracking-[0.25em] uppercase">
+          Filho da Puta — o jogo de cartas
+        </p>
+      </div>
+
+      {/* Decorative cards */}
+      <div className="flex gap-2 -rotate-1 my-1">
+        {[
+          { suit: '♣', color: 'text-gray-900', rotate: '-rotate-3' },
+          { suit: '♥', color: 'text-red-600', rotate: 'rotate-2' },
+          { suit: '♠', color: 'text-gray-900', rotate: '-rotate-1' },
+          { suit: '♦', color: 'text-red-600', rotate: 'rotate-3' },
+        ].map((s, i) => (
+          <div
+            key={i}
+            className={`w-14 h-20 bg-white rounded-xl flex items-center justify-center text-3xl shadow-xl border border-amber-200/30 ${s.rotate}`}
+          >
+            <span className={s.color}>{s.suit}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Solo panel */}
+      <div className="bg-black/30 border border-amber-800/35 rounded-2xl p-6 w-full max-w-xs flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
+        <h2 className="text-amber-200 font-bold text-lg text-center tracking-wide">Jogar Solo</h2>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-amber-800/70 text-xs uppercase tracking-widest text-center">
+            Número de jogadores
+          </label>
+          <div className="flex gap-1.5 justify-center flex-wrap">
+            {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <button
+                key={n}
+                onClick={() => setPlayerCount(n)}
+                className={[
+                  'w-10 h-10 rounded-xl font-bold text-sm transition-all border',
+                  playerCount === n
+                    ? 'bg-amber-600 text-white border-amber-500 scale-110 shadow-[0_0_12px_rgba(217,119,6,0.35)]'
+                    : 'bg-amber-950/50 text-amber-600 border-amber-800/30 hover:border-amber-600/50 hover:text-amber-300',
+                ].join(' ')}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <p className="text-amber-900/60 text-xs text-center">
+            Você vs {playerCount - 1} bot{playerCount > 2 ? 's' : ''}
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        <button
+          onClick={handleStartSolo}
+          className="bg-amber-700 hover:bg-amber-600 text-amber-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg border border-amber-600/40"
+        >
+          Iniciar Partida
+        </button>
+      </div>
+
+      {/* Online panel */}
+      <div className="bg-black/30 border border-amber-800/35 rounded-2xl p-6 w-full max-w-xs flex flex-col gap-4 backdrop-blur-sm shadow-2xl">
+        <h2 className="text-amber-200 font-bold text-lg text-center tracking-wide">Jogar Online</h2>
+        <p className="text-amber-800/60 text-sm text-center">
+          Crie uma sala e compartilhe o link com seus amigos
+        </p>
+        <button
+          onClick={() => router.push('/criar')}
+          className="bg-green-800 hover:bg-green-700 text-green-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg border border-green-700/40"
+        >
+          Criar Sala
+        </button>
+      </div>
+
+      <p className="text-amber-900/45 text-xs text-center max-w-xs">
+        Declare quantos tentos vai fazer. Quem errar perde 1 ponto. Começa com 5. Último sobrevivente vence.
+      </p>
     </div>
   );
 }
