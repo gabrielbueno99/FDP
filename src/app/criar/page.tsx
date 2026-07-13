@@ -17,6 +17,7 @@ export default function CriarSala() {
     if (!name.trim()) return;
     sessionStorage.setItem('fdp-name', name.trim());
     sessionStorage.setItem('fdp-playercount', String(playerCount));
+    sessionStorage.setItem('fdp-host-room', roomCode);
     router.push(`/sala/${roomCode}`);
   };
 

@@ -54,7 +54,9 @@ export default function SalaPage({ params }: PageProps) {
 
   const [nameInput, setNameInput] = useState<string | null>(playerName);
 
-  const mp = useMultiplayer(roomCode, nameInput ?? '');
+  const isHost = typeof window !== 'undefined' && sessionStorage.getItem('fdp-host-room') === roomCode;
+
+  const mp = useMultiplayer(roomCode, nameInput, isHost);
 
   useEffect(() => {
     if (mp.role === 'host' && mp.isConnected && nameInput) {
