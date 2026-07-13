@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useRef, useState } from 'react';
 import { GameState } from '../lib/types';
 
 interface RoundSummaryProps {
@@ -7,8 +8,27 @@ interface RoundSummaryProps {
   isMultiplayer?: boolean;
 }
 
+const AUTO_ADVANCE_SECS = 5;
+
 export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps) {
   const { roundResults, players, round, maxRounds } = state;
+  const [countdown, setCountdown] = useState(AUTO_ADVANCE_SECS);
+  const onNextRef = useRef(onNext);
+  useEffect(() => { onNextRef.current = onNext; }, [onNext]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          onNextRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -20,7 +40,7 @@ export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps
           {round} de {maxRounds} rodadas
         </p>
 
-        <div className="space-y-2.5 mb-6">
+        <div className="space-y-2.5 mb-5">
           {roundResults.map((r) => {
             const player = players.find((p) => p.id === r.playerId);
             return (
@@ -65,11 +85,19 @@ export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps
           })}
         </div>
 
+        {/* Progress bar */}
+        <div className="h-1 bg-amber-900/40 rounded-full overflow-hidden mb-3">
+          <div
+            className="h-full bg-amber-500/70 rounded-full transition-all duration-1000 ease-linear"
+            style={{ width: `${(countdown / AUTO_ADVANCE_SECS) * 100}%` }}
+          />
+        </div>
+
         <button
           onClick={onNext}
           className="w-full bg-amber-700 hover:bg-amber-600 text-amber-100 font-bold py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg border border-amber-600/50"
         >
-          {isMultiplayer ? 'Pronto para próxima rodada' : 'Próxima Rodada →'}
+          {isMultiplayer ? `Pronto (${countdown}s)` : `Próxima Rodada (${countdown}s)`}
         </button>
       </div>
     </div>
