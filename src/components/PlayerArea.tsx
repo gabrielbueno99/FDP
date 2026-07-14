@@ -15,6 +15,8 @@ interface PlayerAreaProps {
   compact?: boolean;
   small?: boolean;
   seat?: boolean;
+  playOrder?: number;
+  hasPlayedInTrick?: boolean;
 }
 
 function Dots({ points, small }: { points: number; small?: boolean }) {
@@ -46,6 +48,8 @@ export function PlayerArea({
   compact,
   small,
   seat,
+  playOrder,
+  hasPlayedInTrick,
 }: PlayerAreaProps) {
   const sortedHand = manilhaValue
     ? [...player.hand].sort((a, b) => getCardStrength(b, manilhaValue) - getCardStrength(a, manilhaValue))
@@ -73,6 +77,15 @@ export function PlayerArea({
               {isDealer && (
                 <span className="bg-amber-700 text-amber-100 text-[8px] font-black px-1 py-px rounded-full leading-none">
                   D
+                </span>
+              )}
+              {playOrder !== undefined && (
+                <span className={`text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border leading-none ${
+                  hasPlayedInTrick
+                    ? 'bg-green-900/60 text-green-400 border-green-700/40'
+                    : 'bg-amber-900/70 text-amber-300 border-amber-700/50'
+                }`}>
+                  {playOrder}
                 </span>
               )}
             </div>
@@ -106,7 +119,7 @@ export function PlayerArea({
 
         {/* Desktop: column layout — always shown in seat mode */}
         <div className={`${seat ? 'flex' : 'hidden sm:flex'} flex-col items-center gap-2 rounded-xl px-3 py-2 bg-black/25 border border-amber-900/25`}>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span className="text-amber-100 font-semibold text-sm">{player.name}</span>
             {isDealer && (
               <span className="bg-amber-700 text-amber-100 text-[9px] font-black px-1.5 py-0.5 rounded-full">
@@ -114,6 +127,15 @@ export function PlayerArea({
               </span>
             )}
             {player.eliminated && <span className="text-red-400 text-xs font-bold">✕</span>}
+            {playOrder !== undefined && (
+              <span className={`text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border leading-none ${
+                hasPlayedInTrick
+                  ? 'bg-green-900/60 text-green-400 border-green-700/40'
+                  : 'bg-amber-900/70 text-amber-300 border-amber-700/50'
+              }`}>
+                {playOrder}
+              </span>
+            )}
           </div>
           <Dots points={player.points} small={small} />
           {player.bid !== null && (
@@ -160,6 +182,15 @@ export function PlayerArea({
           </span>
         )}
         {player.eliminated && <span className="text-red-400 text-xs font-bold">✕</span>}
+        {playOrder !== undefined && (
+          <span className={`text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border leading-none ${
+            hasPlayedInTrick
+              ? 'bg-green-900/60 text-green-400 border-green-700/40'
+              : 'bg-amber-900/70 text-amber-300 border-amber-700/50'
+          }`}>
+            {playOrder}
+          </span>
+        )}
       </div>
 
       <Dots points={player.points} />

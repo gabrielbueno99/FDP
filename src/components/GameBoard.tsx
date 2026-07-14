@@ -50,7 +50,7 @@ export function GameBoard({
   const {
     phase, players, round, maxRounds,
     dealerPlayerId, currentBidderId, currentPlayerId,
-    trickWinnerId, manilhaValue, winner,
+    trickWinnerId, manilhaValue, winner, trickLeaderId,
   } = state;
 
   const humanPlayer = players.find((p) => p.id === humanId);
@@ -60,6 +60,19 @@ export function GameBoard({
 
   // Tento indicator
   const activePlayers = players.filter((p) => !p.eliminated);
+
+  // Play order for current trick
+  const playedInTrick = new Set(state.currentTrick.map((pc) => pc.playerId));
+  const trickPlayOrder: Record<number, number> = {};
+  if (phase === 'playing' || phase === 'trick-end') {
+    const leaderIdx = activePlayers.findIndex((p) => p.id === trickLeaderId);
+    if (leaderIdx !== -1) {
+      activePlayers.forEach((_, i) => {
+        const p = activePlayers[(leaderIdx + i) % activePlayers.length];
+        trickPlayOrder[p.id] = i + 1;
+      });
+    }
+  }
   const biddedPlayers = activePlayers.filter((p) => p.bid !== null);
   const totalBidsSoFar = biddedPlayers.reduce((sum, p) => sum + p.bid!, 0);
   const tentoDiff = totalBidsSoFar - round;
@@ -164,6 +177,8 @@ export function GameBoard({
               compact
               small={opponents.length >= 4}
               seat
+              playOrder={trickPlayOrder[player.id]}
+              hasPlayedInTrick={playedInTrick.has(player.id)}
             />
           </div>
         );
@@ -181,6 +196,8 @@ export function GameBoard({
             manilhaValue={manilhaValue}
             showCards={round !== 1}
             onCardClick={canPlayCard ? onCardPlay : undefined}
+            playOrder={trickPlayOrder[humanPlayer.id]}
+            hasPlayedInTrick={playedInTrick.has(humanPlayer.id)}
           />
 
           {phase === 'bidding' && isMyTurn && (
