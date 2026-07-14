@@ -86,6 +86,7 @@ export function GameBoard({
   const canPlayCard = phase === 'playing' && isMyTurn;
 
   const activePlayers = players.filter((p) => !p.eliminated);
+  const humanIdx = activePlayers.findIndex((p) => p.id === humanId);
   const playedInTrick = new Set(state.currentTrick.map((pc) => pc.playerId));
   const trickPlayOrder: Record<number, number> = {};
   if (phase === 'playing' || phase === 'trick-end') {
@@ -159,11 +160,16 @@ export function GameBoard({
   const portraitSeats = getPortraitSeats(players.length);
   const landscapeSeats = getLandscapeSeats(players.length);
 
+  // Seat positions are indexed by RELATIVE position (0 = human, 1 = next clockwise…).
+  // We must NOT use player.id as the seat index — in multiplayer the human is not
+  // always ID 0, so that would hide the host (ID 0) from every guest's table.
   const renderOpponents = (seats: ReturnType<typeof getPortraitSeats>) =>
     players
       .filter((p) => p.id !== humanId)
       .map((player) => {
-        const seat = seats[player.id];
+        const pIdx   = activePlayers.findIndex((p) => p.id === player.id);
+        const relIdx = (pIdx - humanIdx + activePlayers.length) % activePlayers.length;
+        const seat   = seats[relIdx];
         if (!seat) return null;
         return (
           <div
