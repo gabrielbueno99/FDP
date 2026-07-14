@@ -13,6 +13,7 @@ interface PlayerAreaProps {
   onCardClick?: (cardId: string) => void;
   compact?: boolean;
   small?: boolean;
+  seat?: boolean;
 }
 
 function Dots({ points, small }: { points: number; small?: boolean }) {
@@ -43,6 +44,7 @@ export function PlayerArea({
   onCardClick,
   compact,
   small,
+  seat,
 }: PlayerAreaProps) {
   const highlight =
     isCurrentPlayer || isCurrentBidder
@@ -56,8 +58,8 @@ export function PlayerArea({
   if (compact) {
     return (
       <div className={`${highlight} ${elim}`}>
-        {/* Mobile: horizontal pill with xs cards */}
-        <div className="sm:hidden flex items-center gap-2.5 rounded-xl px-3 py-2 bg-black/25 border border-amber-900/25">
+        {/* Mobile: horizontal pill with xs cards — hidden in seat mode */}
+        <div className={`${seat ? 'hidden' : 'sm:hidden'} flex items-center gap-2.5 rounded-xl px-3 py-2 bg-black/25 border border-amber-900/25`}>
           <div className="flex flex-col gap-0.5 min-w-0">
             <div className="flex items-center gap-1">
               <span className="text-amber-100 font-semibold text-xs truncate max-w-[72px]">
@@ -97,8 +99,8 @@ export function PlayerArea({
           )}
         </div>
 
-        {/* Desktop: column layout with sm/xs cards */}
-        <div className="hidden sm:flex flex-col items-center gap-2 rounded-xl px-3 py-2 bg-black/25 border border-amber-900/25">
+        {/* Desktop: column layout — always shown in seat mode */}
+        <div className={`${seat ? 'flex' : 'hidden sm:flex'} flex-col items-center gap-2 rounded-xl px-3 py-2 bg-black/25 border border-amber-900/25`}>
           <div className="flex items-center gap-2">
             <span className="text-amber-100 font-semibold text-sm">{player.name}</span>
             {isDealer && (

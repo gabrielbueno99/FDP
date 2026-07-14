@@ -249,7 +249,7 @@ export function initGame(playerCount: number, humanCount: number): GameState {
     eliminated: false,
   }));
 
-  const maxRounds = Math.floor(51 / playerCount);
+  const maxRounds = Math.min(Math.floor(51 / playerCount), 10);
   const dealerPlayerId = Math.floor(Math.random() * playerCount);
 
   return dealRound({

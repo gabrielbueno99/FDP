@@ -17,18 +17,23 @@ interface GameBoardProps {
   isMultiplayer?: boolean;
 }
 
-function distributeOpponents(opponents: Player[]): {
-  top: Player[];
-  left: Player[];
-  right: Player[];
-} {
-  const n = opponents.length;
-  if (n <= 3) return { top: opponents, left: [], right: [] };
-  if (n === 4) return { top: opponents.slice(0, 2), left: [opponents[2]], right: [opponents[3]] };
-  if (n === 5) return { top: opponents.slice(0, 3), left: [opponents[3]], right: [opponents[4]] };
-  if (n === 6) return { top: opponents.slice(0, 2), left: opponents.slice(2, 4), right: opponents.slice(4) };
-  // 7
-  return { top: opponents.slice(0, 3), left: opponents.slice(3, 5), right: opponents.slice(5) };
+// Seat positions (x%, y% of viewport) for N opponents around the oval.
+// Oval occupies roughly left:6%–right:6%, top:20%–bottom:44%.
+// Top of header ≈ 6%; keep y ≥ 14 so badges clear the header bar.
+function getOvalSeats(n: number): Array<{ x: string; y: string }> {
+  const configs: Record<number, Array<[number, number]>> = {
+    1: [[50, 14]],
+    2: [[17, 25], [83, 25]],
+    3: [[17, 24], [50, 14], [83, 24]],
+    4: [[9, 40], [29, 15], [71, 15], [91, 40]],
+    5: [[9, 37], [23, 15], [50, 14], [77, 15], [91, 37]],
+    6: [[8, 51], [11, 27], [30, 14], [70, 14], [89, 27], [92, 51]],
+    7: [[8, 51], [11, 27], [26, 14], [50, 13], [74, 14], [89, 27], [92, 51]],
+  };
+  return (configs[Math.min(n, 7)] ?? configs[1]).map(([x, y]) => ({
+    x: `${x}%`,
+    y: `${y}%`,
+  }));
 }
 
 export function GameBoard({
@@ -49,9 +54,16 @@ export function GameBoard({
   } = state;
 
   const humanPlayer = players.find((p) => p.id === humanId);
-  const otherPlayers = players.filter((p) => p.id !== humanId);
+  const opponents = players.filter((p) => p.id !== humanId);
   const canPlayCard = phase === 'playing' && isMyTurn;
-  const { top, left, right } = distributeOpponents(otherPlayers);
+  const seats = getOvalSeats(opponents.length);
+
+  // Tento indicator
+  const activePlayers = players.filter((p) => !p.eliminated);
+  const biddedPlayers = activePlayers.filter((p) => p.bid !== null);
+  const totalBidsSoFar = biddedPlayers.reduce((sum, p) => sum + p.bid!, 0);
+  const tentoDiff = totalBidsSoFar - round;
+  const showTento = biddedPlayers.length > 0;
 
   if (phase === 'game-end') {
     return (
@@ -75,126 +87,127 @@ export function GameBoard({
     );
   }
 
-  const opponentProps = (player: Player, small: boolean) => ({
-    player,
-    isDealer: player.id === dealerPlayerId,
-    isCurrentBidder: phase === 'bidding' && player.id === currentBidderId,
-    isCurrentPlayer: phase === 'playing' && player.id === currentPlayerId,
-    isTrickWinner: phase === 'trick-end' && player.id === trickWinnerId,
-    manilhaValue,
-    showCards: round === 1,
-    compact: true as const,
-    small,
-  });
-
   return (
-    <div className="h-screen wood-bg flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-2 bg-gradient-to-b from-black/60 to-black/20 border-b border-amber-900/40 shrink-0">
+    <div className="h-screen wood-bg relative overflow-hidden select-none">
+
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-2.5 bg-gradient-to-b from-black/70 to-transparent pointer-events-none">
         <span className="font-display font-black text-amber-400 text-2xl tracking-widest drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">
           FDP
         </span>
-        <div className="flex items-center gap-1.5 bg-black/30 rounded-full px-3 py-1 border border-amber-900/30">
-          <span className="text-amber-700/70 text-xs">Rodada</span>
-          <span className="text-amber-200 font-black text-sm">{round}</span>
-          <span className="text-amber-800/60 text-xs">/{maxRounds}</span>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-black/40 rounded-full px-3 py-1 border border-amber-900/30">
+            <span className="text-amber-700/70 text-xs">Rodada</span>
+            <span className="text-amber-200 font-black text-sm">{round}</span>
+            <span className="text-amber-800/60 text-xs">/{maxRounds}</span>
+          </div>
+
+          {showTento && (
+            <div className={`rounded-full px-3 py-1 border text-xs font-bold ${
+              tentoDiff > 0
+                ? 'bg-red-950/70 border-red-700/50 text-red-400'
+                : tentoDiff < 0
+                  ? 'bg-yellow-950/70 border-yellow-700/50 text-yellow-400'
+                  : 'bg-green-950/70 border-green-700/50 text-green-400'
+            }`}>
+              {tentoDiff > 0
+                ? `Sobra ${tentoDiff}`
+                : tentoDiff < 0
+                  ? `Falta ${Math.abs(tentoDiff)}`
+                  : 'Fechado!'}
+            </div>
+          )}
         </div>
+
         <span className="text-amber-700/60 text-xs">
-          {phase === 'bidding' ? '📋 Declarações' : phase === 'playing' ? '🃏 Em jogo' : ''}
+          {phase === 'bidding' ? '📋 Declarações' : (phase === 'playing' || phase === 'trick-end') ? '🃏 Em jogo' : ''}
         </span>
       </div>
 
-      {/* Table area */}
-      <div className="flex-1 flex min-h-0 gap-2 p-2">
+      {/* ── Oval poker table ──────────────────────────────────── */}
+      <div
+        className="absolute z-0"
+        style={{ top: '20%', bottom: '44%', left: '6%', right: '6%' }}
+      >
+        {/* Wooden rail */}
+        <div
+          className="absolute inset-0 rounded-[50%] shadow-2xl"
+          style={{
+            background: 'linear-gradient(145deg, #7a3a0a 0%, #5c2a07 50%, #7a3a0a 100%)',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.7), inset 0 1px 3px rgba(255,200,100,0.15)',
+          }}
+        />
+        {/* Felt surface */}
+        <div className="absolute inset-[10px] rounded-[50%] felt-center flex items-center justify-center overflow-hidden">
+          <TrickArea state={state} />
+        </div>
+      </div>
 
-        {/* Left column — desktop only */}
-        {left.length > 0 && (
-          <div className="hidden sm:flex flex-col gap-2 justify-center shrink-0 w-40">
-            {left.map((player) => (
-              <PlayerArea key={player.id} {...opponentProps(player, true)} />
-            ))}
+      {/* ── Opponent seats around the oval ────────────────────── */}
+      {opponents.map((player, i) => {
+        const seat = seats[i];
+        return (
+          <div
+            key={player.id}
+            className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
+            style={{ left: seat.x, top: seat.y }}
+          >
+            <PlayerArea
+              player={player}
+              isDealer={player.id === dealerPlayerId}
+              isCurrentBidder={phase === 'bidding' && player.id === currentBidderId}
+              isCurrentPlayer={phase === 'playing' && player.id === currentPlayerId}
+              isTrickWinner={phase === 'trick-end' && player.id === trickWinnerId}
+              manilhaValue={manilhaValue}
+              showCards={round === 1}
+              compact
+              small={opponents.length >= 4}
+              seat
+            />
           </div>
-        )}
+        );
+      })}
 
-        {/* Center column */}
-        <div className="flex-1 flex flex-col gap-2 min-w-0 min-h-0">
+      {/* ── Human player — bottom center ──────────────────────── */}
+      {humanPlayer && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 w-full px-4 max-w-lg">
+          <PlayerArea
+            player={humanPlayer}
+            isDealer={humanPlayer.id === dealerPlayerId}
+            isCurrentBidder={phase === 'bidding' && humanPlayer.id === currentBidderId}
+            isCurrentPlayer={phase === 'playing' && humanPlayer.id === currentPlayerId}
+            isTrickWinner={phase === 'trick-end' && humanPlayer.id === trickWinnerId}
+            manilhaValue={manilhaValue}
+            showCards={round !== 1}
+            onCardClick={canPlayCard ? onCardPlay : undefined}
+          />
 
-          {/* Top opponents */}
-          {top.length > 0 && (
-            <div className="shrink-0 flex gap-2 justify-center flex-wrap">
-              {/* Mobile: all opponents here */}
-              <div className="sm:hidden contents">
-                {otherPlayers.map((player) => (
-                  <PlayerArea key={player.id} {...opponentProps(player, false)} />
-                ))}
-              </div>
-              {/* Desktop: only top opponents here */}
-              <div className="hidden sm:contents">
-                {top.map((player) => (
-                  <PlayerArea key={player.id} {...opponentProps(player, false)} />
-                ))}
-              </div>
-            </div>
+          {phase === 'bidding' && isMyTurn && (
+            <BidPanel
+              cardsInRound={round}
+              forbiddenBid={forbiddenBid}
+              onBid={onBid}
+              tentoDiff={tentoDiff}
+              bidsPlaced={biddedPlayers.length}
+            />
           )}
 
-          {/* Mobile-only: all opponents (when there are no top opponents due to all going to sides) */}
-          {top.length === 0 && (
-            <div className="sm:hidden shrink-0 flex gap-1.5 justify-center flex-wrap">
-              {otherPlayers.map((player) => (
-                <PlayerArea key={player.id} {...opponentProps(player, false)} />
-              ))}
-            </div>
+          {phase === 'bidding' && !isMyTurn && (
+            <p className="text-amber-700/60 text-sm animate-pulse">Aguardando declarações...</p>
           )}
 
-          {/* Felt */}
-          <div className="flex-1 min-h-0 rounded-2xl felt-center flex items-center justify-center ring-1 ring-green-900/50 shadow-2xl overflow-hidden">
-            <TrickArea state={state} />
-          </div>
+          {phase === 'playing' && isMyTurn && (
+            <p className="text-amber-300 text-sm font-bold animate-pulse tracking-widest uppercase">
+              ✦ Sua vez ✦
+            </p>
+          )}
 
-          {/* Human player */}
-          {humanPlayer && (
-            <div className="shrink-0 flex flex-col items-center gap-2">
-              <PlayerArea
-                player={humanPlayer}
-                isDealer={humanPlayer.id === dealerPlayerId}
-                isCurrentBidder={phase === 'bidding' && humanPlayer.id === currentBidderId}
-                isCurrentPlayer={phase === 'playing' && humanPlayer.id === currentPlayerId}
-                isTrickWinner={phase === 'trick-end' && humanPlayer.id === trickWinnerId}
-                manilhaValue={manilhaValue}
-                showCards={round !== 1}
-                onCardClick={canPlayCard ? onCardPlay : undefined}
-              />
-
-              {phase === 'bidding' && isMyTurn && (
-                <BidPanel cardsInRound={round} forbiddenBid={forbiddenBid} onBid={onBid} />
-              )}
-
-              {phase === 'bidding' && !isMyTurn && (
-                <p className="text-amber-700/60 text-sm animate-pulse">Aguardando declarações...</p>
-              )}
-
-              {phase === 'playing' && !isMyTurn && (
-                <p className="text-amber-700/60 text-sm animate-pulse">Aguardando jogada...</p>
-              )}
-
-              {phase === 'playing' && isMyTurn && (
-                <p className="text-amber-300 text-sm font-bold animate-pulse tracking-widest uppercase">
-                  ✦ Sua vez ✦
-                </p>
-              )}
-            </div>
+          {phase === 'playing' && !isMyTurn && (
+            <p className="text-amber-700/60 text-sm animate-pulse">Aguardando jogada...</p>
           )}
         </div>
-
-        {/* Right column — desktop only */}
-        {right.length > 0 && (
-          <div className="hidden sm:flex flex-col gap-2 justify-center shrink-0 w-40">
-            {right.map((player) => (
-              <PlayerArea key={player.id} {...opponentProps(player, true)} />
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
       {phase === 'round-end' && (
         <RoundSummary state={state} onNext={onNextRound} isMultiplayer={isMultiplayer} />
