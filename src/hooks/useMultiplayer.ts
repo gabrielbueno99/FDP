@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { GameState, PlayerAction } from '../lib/types';
+import { ChatMessage, GameState, PlayerAction } from '../lib/types';
 import { supabase } from '../lib/supabase';
 import {
   advanceToNextRound,
@@ -31,7 +31,9 @@ interface UseMultiplayerReturn {
   isConnected: boolean;
   error: string | null;
   disconnectedPlayer: DisconnectedPlayer | null;
+  chatMessages: ChatMessage[];
   sendAction: (action: PlayerAction) => void;
+  sendChat: (text: string) => void;
   startGame: (totalPlayers: number) => void;
   removeDisconnectedPlayer: () => void;
   disconnect: () => void;
@@ -50,6 +52,7 @@ export function useMultiplayer(
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [disconnectedPlayer, setDisconnectedPlayer] = useState<DisconnectedPlayer | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const hostGameRef = useRef<GameState | null>(null);
@@ -166,6 +169,10 @@ export function useMultiplayer(
         const { action, fromPlayerId } = payload as { action: PlayerAction; fromPlayerId: number };
         applyHostAction(action, fromPlayerId);
       })
+      // ── Chat ────────────────────────────────────────────────────────
+      .on('broadcast', { event: 'chat' }, ({ payload }) => {
+        setChatMessages((prev) => [...prev, payload as ChatMessage]);
+      })
       // ── Disconnect events (broadcast so all players see the pause) ──
       .on('broadcast', { event: 'player_disconnected' }, ({ payload }) => {
         if (isHost) return;
@@ -225,6 +232,18 @@ export function useMultiplayer(
       supabase.removeChannel(channel);
     };
   }, [roomCode, playerName, isHost, send, applyHostAction]);
+
+  const sendChat = useCallback((text: string) => {
+    const msg: ChatMessage = {
+      id: clientIdRef.current + Date.now(),
+      playerId: myPlayerIdRef.current ?? 0,
+      name: playerName ?? '?',
+      text,
+      ts: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, msg]);
+    send('chat', msg as unknown as Record<string, unknown>);
+  }, [playerName, send]);
 
   const sendAction = useCallback((action: PlayerAction) => {
     if (isHost) {
@@ -315,7 +334,9 @@ export function useMultiplayer(
     isConnected,
     error,
     disconnectedPlayer,
+    chatMessages,
     sendAction,
+    sendChat,
     startGame,
     removeDisconnectedPlayer,
     disconnect,

@@ -1,10 +1,11 @@
 'use client';
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMultiplayer } from '../../../hooks/useMultiplayer';
 import { useGame } from '../../../hooks/useGame';
 import { GameBoard } from '../../../components/GameBoard';
 import { DisconnectOverlay } from '../../../components/DisconnectOverlay';
+import { ChatPanel } from '../../../components/ChatPanel';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -54,6 +55,9 @@ export default function SalaPage({ params }: PageProps) {
   });
 
   const [nameInput, setNameInput] = useState<string | null>(playerName);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const prevMsgCount = useRef(0);
 
   const isHost = typeof window !== 'undefined' && sessionStorage.getItem('fdp-host-room') === roomCode;
 
@@ -64,6 +68,14 @@ export default function SalaPage({ params }: PageProps) {
       // host ready
     }
   }, [mp.role, mp.isConnected, nameInput]);
+
+  useEffect(() => {
+    const newCount = mp.chatMessages.length;
+    if (newCount > prevMsgCount.current && !chatOpen) {
+      setUnread((u) => u + (newCount - prevMsgCount.current));
+    }
+    prevMsgCount.current = newCount;
+  }, [mp.chatMessages.length, chatOpen]);
 
   const { state: gameState, placeBid, playCard, nextRound, humanId, forbiddenBid, isMyTurn } =
     useGame({
@@ -127,6 +139,40 @@ export default function SalaPage({ params }: PageProps) {
           onRestart={() => router.push('/')}
           isMultiplayer
         />
+
+        {/* Chat toggle button */}
+        <button
+          onClick={() => { setChatOpen(true); setUnread(0); }}
+          className="fixed top-2.5 right-2.5 z-30 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-amber-800/50 shadow-lg hover:bg-amber-900/60 transition-colors"
+        >
+          <span className="text-base leading-none">💬</span>
+          {unread > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+              {unread > 9 ? '9+' : unread}
+            </span>
+          )}
+        </button>
+
+        {/* Chat bottom sheet */}
+        {chatOpen && (
+          <div className="fixed inset-x-0 bottom-0 z-40 flex flex-col bg-amber-950/98 border-t-2 border-amber-800/50 shadow-2xl" style={{ height: '55vh' }}>
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-amber-900/30 shrink-0">
+              <span className="text-amber-200 font-bold text-sm">Chat da Sala</span>
+              <button
+                onClick={() => setChatOpen(false)}
+                className="text-amber-700 hover:text-amber-300 text-xl leading-none transition-colors"
+              >
+                ×
+              </button>
+            </div>
+            <ChatPanel
+              messages={mp.chatMessages}
+              myPlayerId={mp.myPlayerId}
+              onSend={mp.sendChat}
+            />
+          </div>
+        )}
+
         {mp.disconnectedPlayer && (
           <DisconnectOverlay
             player={mp.disconnectedPlayer}
@@ -189,6 +235,18 @@ export default function SalaPage({ params }: PageProps) {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Chat in lobby */}
+        <div className="flex flex-col border border-amber-900/30 rounded-xl overflow-hidden bg-black/20" style={{ height: '180px' }}>
+          <div className="px-3 py-1.5 border-b border-amber-900/25 shrink-0">
+            <span className="text-amber-800/60 text-[10px] uppercase tracking-widest">Chat</span>
+          </div>
+          <ChatPanel
+            messages={mp.chatMessages}
+            myPlayerId={mp.myPlayerId}
+            onSend={mp.sendChat}
+          />
         </div>
 
         {mp.role === 'host' && (

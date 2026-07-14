@@ -69,3 +69,11 @@ export type PlayerAction =
   | { type: 'bid'; value: number }
   | { type: 'play'; cardId: string }
   | { type: 'next_round' };
+
+export interface ChatMessage {
+  id: string;
+  playerId: number;
+  name: string;
+  text: string;
+  ts: number;
+}
