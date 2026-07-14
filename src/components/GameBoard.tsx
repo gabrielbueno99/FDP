@@ -199,8 +199,7 @@ export function GameBoard({
         isCurrentPlayer={phase === 'playing' && humanPlayer.id === currentPlayerId}
         isTrickWinner={phase === 'trick-end' && humanPlayer.id === trickWinnerId}
         manilhaValue={manilhaValue}
-        showCards={false}
-        revealOnHover={round > 1}
+        showCards={round > 1}
         onCardClick={canPlayCard ? onCardPlay : undefined}
         playOrder={trickPlayOrder[humanPlayer.id]}
         hasPlayedInTrick={playedInTrick.has(humanPlayer.id)}

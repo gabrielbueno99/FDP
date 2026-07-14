@@ -1,6 +1,5 @@
 'use client';
-import { useState } from 'react';
-import { Card, Player, Value } from '../lib/types';
+import { Player, Value } from '../lib/types';
 import { CardBack, CardComponent } from './CardComponent';
 import { getCardStrength } from '../lib/deck';
 
@@ -12,7 +11,6 @@ interface PlayerAreaProps {
   isTrickWinner: boolean;
   manilhaValue: Value | null;
   showCards: boolean;
-  revealOnHover?: boolean;
   onCardClick?: (cardId: string) => void;
   compact?: boolean;
   small?: boolean;
@@ -22,55 +20,6 @@ interface PlayerAreaProps {
   hasPlayedInTrick?: boolean;
 }
 
-// CSS 3D flip card — back facing by default, front reveals on hover of parent container.
-// The inner CardComponent is rendered without clickable so its own hover transforms
-// don't conflict with the perspective animation. Lift/click effects live on this wrapper.
-function FlipCard({
-  revealed,
-  card,
-  isManilha,
-  clickable,
-  onClick,
-}: {
-  revealed: boolean;
-  card: Card;
-  isManilha: boolean;
-  clickable: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <div
-      className={[
-        'w-20 h-28 shrink-0 transition-transform duration-150',
-        clickable && revealed
-          ? 'cursor-pointer hover:scale-110 hover:-translate-y-4 hover:z-10 hover:shadow-2xl hover:shadow-black/60'
-          : '',
-      ].join(' ')}
-      style={{ perspective: '500px' }}
-      onClick={clickable && revealed ? onClick : undefined}
-    >
-      <div
-        className="relative w-full h-full"
-        style={{
-          transformStyle: 'preserve-3d',
-          transition: 'transform 0.42s cubic-bezier(0.4,0,0.2,1)',
-          transform: revealed ? 'rotateY(0deg)' : 'rotateY(180deg)',
-        }}
-      >
-        <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden' }}>
-          {/* No clickable prop — hover effects are on the wrapper, not the card itself */}
-          <CardComponent card={card} isManilha={isManilha} size="lg" />
-        </div>
-        <div
-          className="absolute inset-0"
-          style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-        >
-          <CardBack size="lg" />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function Dots({ points, small }: { points: number; small?: boolean }) {
   return (
@@ -97,7 +46,6 @@ export function PlayerArea({
   isTrickWinner,
   manilhaValue,
   showCards,
-  revealOnHover,
   onCardClick,
   compact,
   small,
@@ -106,7 +54,6 @@ export function PlayerArea({
   playOrder,
   hasPlayedInTrick,
 }: PlayerAreaProps) {
-  const [hovered, setHovered] = useState(false);
   const sortedHand = manilhaValue
     ? [...player.hand].sort((a, b) => getCardStrength(b, manilhaValue) - getCardStrength(a, manilhaValue))
     : [...player.hand];
@@ -266,13 +213,7 @@ export function PlayerArea({
       )}
 
       {!player.eliminated && (
-        <div
-          className="flex gap-1.5 justify-center pt-6 pb-3 px-4"
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          onTouchStart={() => setHovered(true)}
-          onTouchEnd={() => setHovered(false)}
-        >
+        <div className="flex gap-1.5 justify-center py-2">
           {showCards
             ? sortedHand.map((card) => (
                 <CardComponent
@@ -284,31 +225,15 @@ export function PlayerArea({
                   size="lg"
                 />
               ))
-            : revealOnHover
-              ? sortedHand.map((card) => (
-                  <FlipCard
-                    key={card.id}
-                    revealed={hovered}
-                    card={card}
-                    isManilha={card.value === manilhaValue}
-                    clickable={!!onCardClick && hovered}
-                    onClick={() => onCardClick?.(card.id)}
-                  />
-                ))
-              : sortedHand.map((card, i) => (
-                  <CardBack
-                    key={i}
-                    size="lg"
-                    clickable={!!onCardClick}
-                    onClick={() => onCardClick?.(card.id)}
-                  />
-                ))}
+            : sortedHand.map((card, i) => (
+                <CardBack
+                  key={i}
+                  size="lg"
+                  clickable={!!onCardClick}
+                  onClick={() => onCardClick?.(card.id)}
+                />
+              ))}
         </div>
-      )}
-      {revealOnHover && !hovered && !player.eliminated && player.hand.length > 0 && (
-        <p className="text-blue-700/50 text-[10px] animate-pulse tracking-widest uppercase">
-          passe o mouse para ver suas cartas
-        </p>
       )}
     </div>
   );
