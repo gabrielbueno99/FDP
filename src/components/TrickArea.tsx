@@ -1,6 +1,6 @@
 'use client';
 import { GameState } from '../lib/types';
-import { SUIT_SYMBOLS } from '../lib/deck';
+import { SUIT_SYMBOLS, getCardStrength } from '../lib/deck';
 import { CardComponent } from './CardComponent';
 
 interface TrickAreaProps {
@@ -9,6 +9,13 @@ interface TrickAreaProps {
 
 export function TrickArea({ state }: TrickAreaProps) {
   const { currentTrick, vira, manilhaValue, trickWinnerId, players, phase } = state;
+
+  const leadingCardId = currentTrick.length > 0 && manilhaValue
+    ? currentTrick.reduce((leader, played) =>
+        getCardStrength(played.card, manilhaValue) > getCardStrength(leader.card, manilhaValue)
+          ? played : leader
+      ).card.id
+    : null;
 
   return (
     <div className="flex flex-col items-center gap-4 w-full py-2">
@@ -48,7 +55,12 @@ export function TrickArea({ state }: TrickAreaProps) {
               const isWinner = playerId === trickWinnerId;
               return (
                 <div key={card.id} className="flex flex-col items-center gap-1.5">
-                  <CardComponent card={card} isManilha={card.value === manilhaValue} size="md" />
+                  <CardComponent
+                    card={card}
+                    isManilha={card.value === manilhaValue}
+                    isWinning={!isWinner && card.id === leadingCardId}
+                    size="md"
+                  />
                   <span className={`text-xs font-semibold ${isWinner ? 'text-green-400' : 'text-green-700/50'}`}>
                     {player?.name}{isWinner && ' ✓'}
                   </span>

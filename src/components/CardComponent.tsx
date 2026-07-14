@@ -5,6 +5,7 @@ import { SUIT_SYMBOLS } from '../lib/deck';
 interface CardProps {
   card: Card;
   isManilha?: boolean;
+  isWinning?: boolean;
   clickable?: boolean;
   onClick?: () => void;
   size?: 'xs' | 'sm' | 'md' | 'lg';
@@ -14,7 +15,7 @@ interface CardProps {
 const suitColor = (suit: Card['suit']) =>
   suit === 'hearts' || suit === 'diamonds' ? 'text-red-600' : 'text-gray-900';
 
-export function CardComponent({ card, isManilha, clickable, onClick, size = 'md', dimmed }: CardProps) {
+export function CardComponent({ card, isManilha, isWinning, clickable, onClick, size = 'md', dimmed }: CardProps) {
   const sym = SUIT_SYMBOLS[card.suit];
   const color = suitColor(card.suit);
 
@@ -38,7 +39,9 @@ export function CardComponent({ card, isManilha, clickable, onClick, size = 'md'
         dims,
         isManilha
           ? 'border-amber-400 shadow-[0_0_14px_3px_rgba(251,191,36,0.45)] bg-amber-50'
-          : 'border-gray-200/80 shadow-lg bg-white',
+          : isWinning
+            ? 'border-emerald-400 shadow-[0_0_14px_4px_rgba(52,211,153,0.5)] bg-white ring-2 ring-emerald-400/70'
+            : 'border-gray-200/80 shadow-lg bg-white',
         clickable
           ? 'cursor-pointer hover:scale-110 hover:-translate-y-4 hover:shadow-2xl hover:shadow-black/60 hover:z-10'
           : '',

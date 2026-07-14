@@ -1,6 +1,7 @@
 'use client';
 import { Player, Value } from '../lib/types';
 import { CardBack, CardComponent } from './CardComponent';
+import { getCardStrength } from '../lib/deck';
 
 interface PlayerAreaProps {
   player: Player;
@@ -46,6 +47,10 @@ export function PlayerArea({
   small,
   seat,
 }: PlayerAreaProps) {
+  const sortedHand = manilhaValue
+    ? [...player.hand].sort((a, b) => getCardStrength(b, manilhaValue) - getCardStrength(a, manilhaValue))
+    : [...player.hand];
+
   const highlight =
     isCurrentPlayer || isCurrentBidder
       ? 'ring-2 ring-amber-400/70 ring-offset-1 ring-offset-transparent'
@@ -86,7 +91,7 @@ export function PlayerArea({
           {!player.eliminated && (
             <div className="flex gap-0.5 flex-shrink-0">
               {showCards
-                ? player.hand.map((card) => (
+                ? sortedHand.map((card) => (
                     <CardComponent
                       key={card.id}
                       card={card}
@@ -94,7 +99,7 @@ export function PlayerArea({
                       size="xs"
                     />
                   ))
-                : player.hand.map((_, i) => <CardBack key={i} size="xs" />)}
+                : sortedHand.map((_, i) => <CardBack key={i} size="xs" />)}
             </div>
           )}
         </div>
@@ -124,7 +129,7 @@ export function PlayerArea({
           {!player.eliminated && (
             <div className="flex gap-0.5 flex-wrap justify-center">
               {showCards
-                ? player.hand.map((card) => (
+                ? sortedHand.map((card) => (
                     <CardComponent
                       key={card.id}
                       card={card}
@@ -132,7 +137,7 @@ export function PlayerArea({
                       size={small ? 'xs' : 'sm'}
                     />
                   ))
-                : player.hand.map((_, i) => <CardBack key={i} size={small ? 'xs' : 'sm'} />)}
+                : sortedHand.map((_, i) => <CardBack key={i} size={small ? 'xs' : 'sm'} />)}
             </div>
           )}
         </div>
@@ -176,7 +181,7 @@ export function PlayerArea({
       {!player.eliminated && (
         <div className="flex gap-1.5 justify-center overflow-x-auto pb-1 max-w-full">
           {showCards
-            ? player.hand.map((card) => (
+            ? sortedHand.map((card) => (
                 <CardComponent
                   key={card.id}
                   card={card}
@@ -186,7 +191,7 @@ export function PlayerArea({
                   size="lg"
                 />
               ))
-            : player.hand.map((card, i) => (
+            : sortedHand.map((card, i) => (
                 <CardBack
                   key={i}
                   size="lg"
