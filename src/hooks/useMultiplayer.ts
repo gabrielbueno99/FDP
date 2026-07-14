@@ -63,6 +63,15 @@ export function useMultiplayer(
   const myPlayerIdRef = useRef<number | null>(myPlayerId);
   const disconnectedPlayerRef = useRef<DisconnectedPlayer | null>(null);
 
+  // Bug 1: track clientId → playerId so duplicate `join` retries don't create new players
+  const clientPlayerMapRef = useRef<Map<string, number>>(new Map());
+  // Bug 1: sequence counter so out-of-order lobby broadcasts don't overwrite newer state
+  const lobbySeqRef = useRef(0);
+  const lastLobbySeqRef = useRef(0);
+
+  // Bug 2: heartbeat interval to keep channel alive and let reconnecting guests recover
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => { lobbyPlayersRef.current = lobbyPlayers; }, [lobbyPlayers]);
   useEffect(() => { myPlayerIdRef.current = myPlayerId; }, [myPlayerId]);
   useEffect(() => { disconnectedPlayerRef.current = disconnectedPlayer; }, [disconnectedPlayer]);
@@ -73,6 +82,11 @@ export function useMultiplayer(
 
   const broadcastState = useCallback((gs: GameState) => {
     send('game_state', { state: gs });
+  }, [send]);
+
+  // Sends the full lobby with the current sequence number
+  const broadcastLobby = useCallback((players: LobbyPlayer[]) => {
+    send('lobby', { players, seq: lobbySeqRef.current });
   }, [send]);
 
   const applyHostAction = useCallback((action: PlayerAction, fromPlayerId: number) => {
@@ -122,6 +136,15 @@ export function useMultiplayer(
         if (!isHost) return;
         const { clientId, name } = payload as { clientId: string; name: string };
 
+        // Bug 1 fix: if this clientId already has a player, just resend welcome + state
+        if (clientPlayerMapRef.current.has(clientId)) {
+          const existingId = clientPlayerMapRef.current.get(clientId)!;
+          send('welcome', { clientId, playerId: existingId });
+          broadcastLobby(lobbyPlayersRef.current);
+          if (hostGameRef.current) send('game_state', { state: hostGameRef.current });
+          return;
+        }
+
         const dp = disconnectedPlayerRef.current;
         let playerId: number;
 
@@ -136,9 +159,11 @@ export function useMultiplayer(
           const updated = [...lobbyPlayersRef.current, { id: playerId, name }];
           lobbyPlayersRef.current = updated;
           setLobbyPlayers(updated);
-          send('lobby', { players: updated });
+          lobbySeqRef.current++;
+          broadcastLobby(updated);
         }
 
+        clientPlayerMapRef.current.set(clientId, playerId);
         send('welcome', { clientId, playerId });
         if (hostGameRef.current) {
           send('game_state', { state: hostGameRef.current });
@@ -150,15 +175,18 @@ export function useMultiplayer(
         if (clientId === clientIdRef.current) {
           myPlayerIdRef.current = playerId;
           setMyPlayerId(playerId);
-          if (retryInterval) clearInterval(retryInterval);
-          if (timeoutId) clearTimeout(timeoutId);
-          // Start tracking presence now that we have our ID
+          if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
           channel.track({ playerId, name: playerName });
         }
       })
       .on('broadcast', { event: 'lobby' }, ({ payload }) => {
         if (isHost) return;
-        setLobbyPlayers((payload as { players: LobbyPlayer[] }).players);
+        const { players, seq } = payload as { players: LobbyPlayer[]; seq?: number };
+        // Bug 1 fix: ignore stale out-of-order lobby broadcasts
+        if (seq !== undefined && seq <= lastLobbySeqRef.current) return;
+        if (seq !== undefined) lastLobbySeqRef.current = seq;
+        setLobbyPlayers(players);
       })
       .on('broadcast', { event: 'game_state' }, ({ payload }) => {
         if (isHost) return;
@@ -168,6 +196,12 @@ export function useMultiplayer(
         if (!isHost) return;
         const { action, fromPlayerId } = payload as { action: PlayerAction; fromPlayerId: number };
         applyHostAction(action, fromPlayerId);
+      })
+      // Bug 2 fix: guest requests current state after reconnecting
+      .on('broadcast', { event: 'request_state' }, () => {
+        if (!isHost) return;
+        if (hostGameRef.current) broadcastState(hostGameRef.current);
+        broadcastLobby(lobbyPlayersRef.current);
       })
       // ── Chat ────────────────────────────────────────────────────────
       .on('broadcast', { event: 'chat' }, ({ payload }) => {
@@ -191,7 +225,7 @@ export function useMultiplayer(
 
         for (const p of leftPresences) {
           const { playerId, name } = p as unknown as { playerId: number; name: string };
-          if (playerId === 0) continue; // host themselves
+          if (playerId === 0) continue;
           const player = gs.players.find(pl => pl.id === playerId && !pl.eliminated);
           if (player) {
             const dp = { id: playerId, name: player.name ?? name };
@@ -207,13 +241,30 @@ export function useMultiplayer(
 
           if (isHost) {
             channel.track({ playerId: 0, name: playerName });
+
+            // Bug 2 fix: heartbeat every 12s keeps the channel alive and lets
+            // reconnecting guests recover the game state without needing to rejoin
+            if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+            heartbeatRef.current = setInterval(() => {
+              if (hostGameRef.current) broadcastState(hostGameRef.current);
+              else broadcastLobby(lobbyPlayersRef.current);
+            }, 12000);
           } else {
+            // Bug 2 fix: if we already have a player ID, we're reconnecting —
+            // request current state from host instead of re-joining
+            if (myPlayerIdRef.current !== null) {
+              send('request_state', { playerId: myPlayerIdRef.current });
+              return;
+            }
+
             const sendJoin = () => {
               if (myPlayerIdRef.current !== null) return;
               send('join', { clientId: clientIdRef.current, name: playerName });
             };
             sendJoin();
+            if (retryInterval) clearInterval(retryInterval);
             retryInterval = setInterval(sendJoin, 2000);
+            if (timeoutId) clearTimeout(timeoutId);
             timeoutId = setTimeout(() => {
               if (retryInterval) clearInterval(retryInterval);
               if (myPlayerIdRef.current === null) {
@@ -229,9 +280,10 @@ export function useMultiplayer(
     return () => {
       if (retryInterval) clearInterval(retryInterval);
       if (timeoutId) clearTimeout(timeoutId);
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
       supabase.removeChannel(channel);
     };
-  }, [roomCode, playerName, isHost, send, applyHostAction]);
+  }, [roomCode, playerName, isHost, send, broadcastState, broadcastLobby, applyHostAction]);
 
   const sendChat = useCallback((text: string) => {
     const msg: ChatMessage = {
@@ -278,7 +330,6 @@ export function useMultiplayer(
     let gs = hostGameRef.current;
     if (!gs) return;
 
-    // If game is waiting for the disconnected player, auto-act for them
     if (gs.phase === 'bidding' && gs.currentBidderId === playerId) {
       gs = applyBid(gs, playerId, 0);
     } else if (gs.phase === 'playing' && gs.currentPlayerId === playerId) {
@@ -298,7 +349,6 @@ export function useMultiplayer(
       }
     }
 
-    // Eliminate the player
     gs = {
       ...gs,
       players: gs.players.map(p =>
@@ -306,7 +356,6 @@ export function useMultiplayer(
       ),
     };
 
-    // End game if only one player remains
     const remaining = getActivePlayers(gs.players);
     if (remaining.length <= 1) {
       const winner = remaining[0] ?? [...gs.players].sort((a, b) => b.points - a.points)[0] ?? null;
