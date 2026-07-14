@@ -32,12 +32,12 @@ function ChatWidget({ messages, myPlayerId, onSend }: ChatWidgetProps) {
   return (
     <div className="fixed bottom-4 right-3 z-40 flex flex-col items-end gap-2">
       {open && (
-        <div className="w-72 flex flex-col bg-amber-950/97 border border-amber-800/50 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-md" style={{ height: '320px' }}>
-          <div className="flex items-center justify-between px-3 py-2 border-b border-amber-900/40 shrink-0 bg-black/30">
-            <span className="text-amber-300 font-bold text-xs tracking-wide uppercase">Chat da Sala</span>
+        <div className="w-72 flex flex-col bg-blue-950/97 border border-blue-800/50 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-md" style={{ height: '320px' }}>
+          <div className="flex items-center justify-between px-3 py-2 border-b border-blue-900/40 shrink-0 bg-black/30">
+            <span className="text-cyan-300 font-bold text-xs tracking-wide uppercase">Chat da Sala</span>
             <button
               onClick={() => setOpen(false)}
-              className="text-amber-700 hover:text-amber-300 text-lg leading-none transition-colors"
+              className="text-blue-700 hover:text-cyan-300 text-lg leading-none transition-colors"
             >
               ×
             </button>
@@ -48,7 +48,7 @@ function ChatWidget({ messages, myPlayerId, onSend }: ChatWidgetProps) {
 
       <button
         onClick={() => { setOpen((v) => !v); setUnread(0); }}
-        className="relative w-11 h-11 rounded-full bg-amber-800 hover:bg-amber-700 active:scale-95 flex items-center justify-center shadow-xl border border-amber-600/50 transition-all"
+        className="relative w-11 h-11 rounded-full bg-blue-800 hover:bg-blue-700 active:scale-95 flex items-center justify-center shadow-xl border border-blue-600/50 transition-all"
       >
         <span className="text-lg leading-none">{open ? '×' : '💬'}</span>
         {!open && unread > 0 && (
@@ -65,10 +65,10 @@ function JoinForm({ onJoin }: { onJoin: (name: string) => void }) {
   const [name, setName] = useState('');
   return (
     <div className="min-h-screen wood-bg flex items-center justify-center p-6">
-      <div className="bg-black/30 border border-amber-800/35 rounded-2xl p-6 w-full max-w-sm flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
-        <h2 className="text-amber-200 font-bold text-xl text-center tracking-wide">Entrar na Sala</h2>
+      <div className="bg-black/35 border border-blue-900/35 rounded-2xl p-6 w-full max-w-sm flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
+        <h2 className="text-cyan-200 font-bold text-xl text-center tracking-wide">Entrar na Sala</h2>
         <div className="flex flex-col gap-2">
-          <label className="text-amber-800/70 text-xs uppercase tracking-widest">Seu nome</label>
+          <label className="text-blue-700/70 text-xs uppercase tracking-widest">Seu nome</label>
           <input
             type="text"
             value={name}
@@ -76,13 +76,13 @@ function JoinForm({ onJoin }: { onJoin: (name: string) => void }) {
             onKeyDown={(e) => e.key === 'Enter' && name.trim() && onJoin(name.trim())}
             placeholder="Como te chamamos?"
             maxLength={16}
-            className="bg-black/40 border border-amber-800/40 text-amber-100 rounded-xl px-4 py-3 outline-none focus:border-amber-500/70 transition-colors placeholder-amber-900/50"
+            className="bg-black/40 border border-blue-800/40 text-slate-100 rounded-xl px-4 py-3 outline-none focus:border-cyan-500/70 transition-colors placeholder-blue-900/50"
           />
         </div>
         <button
           onClick={() => name.trim() && onJoin(name.trim())}
           disabled={!name.trim()}
-          className="bg-green-800 hover:bg-green-700 disabled:bg-amber-950/40 disabled:text-amber-900/40 text-green-100 font-bold py-3 rounded-xl transition-colors border border-green-700/40 shadow-lg"
+          className="bg-cyan-700 hover:bg-cyan-600 disabled:bg-blue-950/40 disabled:text-blue-900/40 text-cyan-100 font-bold py-3 rounded-xl transition-colors border border-cyan-600/40 shadow-lg"
         >
           Entrar
         </button>
@@ -133,12 +133,12 @@ export default function SalaPage({ params }: PageProps) {
   if (mp.error) {
     return (
       <div className="min-h-screen wood-bg flex items-center justify-center p-6">
-        <div className="bg-black/30 border border-red-800/40 rounded-2xl p-6 max-w-sm w-full text-center flex flex-col gap-4 backdrop-blur-sm shadow-2xl">
+        <div className="bg-black/35 border border-red-800/40 rounded-2xl p-6 max-w-sm w-full text-center flex flex-col gap-4 backdrop-blur-sm shadow-2xl">
           <div className="text-red-400 text-4xl">⚠</div>
-          <p className="text-amber-100 font-semibold">{mp.error}</p>
+          <p className="text-slate-100 font-semibold">{mp.error}</p>
           <button
             onClick={() => router.push('/')}
-            className="bg-amber-900/50 hover:bg-amber-800/60 text-amber-300 font-bold py-3 rounded-xl transition-colors border border-amber-800/30"
+            className="bg-blue-900/50 hover:bg-blue-800/60 text-cyan-300 font-bold py-3 rounded-xl transition-colors border border-blue-800/30"
           >
             Voltar ao Início
           </button>
@@ -151,8 +151,8 @@ export default function SalaPage({ params }: PageProps) {
     return (
       <div className="min-h-screen wood-bg flex items-center justify-center">
         <div className="text-center flex flex-col items-center gap-4">
-          <div className="font-display font-black text-amber-400 text-5xl tracking-widest">FDP</div>
-          <div className="text-amber-700/60 animate-pulse text-sm">Conectando à sala {roomCode}...</div>
+          <div className="font-display font-black text-cyan-400 text-5xl tracking-widest">FDP</div>
+          <div className="text-blue-700/60 animate-pulse text-sm">Conectando à sala {roomCode}...</div>
         </div>
       </div>
     );
@@ -198,49 +198,49 @@ export default function SalaPage({ params }: PageProps) {
   return (
     <>
       <div className="min-h-screen wood-bg flex flex-col items-center justify-center p-6 gap-6">
-        <h1 className="font-display font-black text-amber-400 text-5xl tracking-widest drop-shadow-[0_0_16px_rgba(251,191,36,0.25)]">
+        <h1 className="font-display font-black text-cyan-400 text-5xl tracking-widest drop-shadow-[0_0_16px_rgba(0,212,255,0.3)]">
           FDP
         </h1>
 
-        <div className="bg-black/30 border border-amber-800/35 rounded-2xl p-6 w-full max-w-sm flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
+        <div className="bg-black/35 border border-blue-900/35 rounded-2xl p-6 w-full max-w-sm flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
           <div className="text-center">
-            <p className="text-amber-800/60 text-[10px] uppercase tracking-widest mb-1">Código da Sala</p>
-            <p className="font-display font-black text-amber-400 text-4xl tracking-widest">{roomCode}</p>
+            <p className="text-blue-700/60 text-[10px] uppercase tracking-widest mb-1">Código da Sala</p>
+            <p className="font-display font-black text-cyan-400 text-4xl tracking-widest">{roomCode}</p>
           </div>
 
           <div className="flex gap-2">
             <input
               readOnly
               value={roomUrl}
-              className="flex-1 bg-black/40 text-amber-700/70 text-xs rounded-xl px-3 py-2 outline-none truncate border border-amber-900/30"
+              className="flex-1 bg-black/40 text-blue-600/70 text-xs rounded-xl px-3 py-2 outline-none truncate border border-blue-900/30"
             />
             <button
               onClick={() => navigator.clipboard.writeText(roomUrl)}
-              className="bg-amber-800/50 hover:bg-amber-700/60 text-amber-300 text-xs px-3 py-2 rounded-xl transition-colors border border-amber-700/30 whitespace-nowrap"
+              className="bg-blue-800/50 hover:bg-blue-700/60 text-cyan-300 text-xs px-3 py-2 rounded-xl transition-colors border border-blue-700/30 whitespace-nowrap"
             >
               Copiar
             </button>
           </div>
 
           <div>
-            <p className="text-amber-700/60 text-xs mb-2 uppercase tracking-widest">
+            <p className="text-blue-700/60 text-xs mb-2 uppercase tracking-widest">
               Jogadores ({mp.lobbyPlayers.length}/{playerCount})
             </p>
             <div className="space-y-2">
               {mp.lobbyPlayers.map((p) => (
-                <div key={p.id} className="flex items-center gap-2 bg-black/25 rounded-xl px-3 py-2 border border-amber-900/20">
+                <div key={p.id} className="flex items-center gap-2 bg-black/25 rounded-xl px-3 py-2 border border-blue-900/20">
                   <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_4px_rgba(74,222,128,0.5)]" />
-                  <span className="text-amber-100 text-sm">
+                  <span className="text-slate-100 text-sm">
                     {p.name}
-                    {p.id === 0 && <span className="text-amber-700/60 text-xs"> (host)</span>}
-                    {p.id === mp.myPlayerId && p.id !== 0 && <span className="text-amber-700/60 text-xs"> (você)</span>}
+                    {p.id === 0 && <span className="text-blue-700/60 text-xs"> (host)</span>}
+                    {p.id === mp.myPlayerId && p.id !== 0 && <span className="text-blue-700/60 text-xs"> (você)</span>}
                   </span>
                 </div>
               ))}
               {Array.from({ length: Math.max(0, playerCount - mp.lobbyPlayers.length) }, (_, i) => (
-                <div key={`empty-${i}`} className="flex items-center gap-2 bg-black/15 rounded-xl px-3 py-2 border border-amber-900/10">
-                  <div className="w-2 h-2 rounded-full bg-amber-900/40" />
-                  <span className="text-amber-900/50 text-sm">Aguardando...</span>
+                <div key={`empty-${i}`} className="flex items-center gap-2 bg-black/15 rounded-xl px-3 py-2 border border-blue-900/10">
+                  <div className="w-2 h-2 rounded-full bg-blue-900/40" />
+                  <span className="text-blue-900/50 text-sm">Aguardando...</span>
                 </div>
               ))}
             </div>
@@ -250,7 +250,7 @@ export default function SalaPage({ params }: PageProps) {
             <button
               onClick={() => mp.startGame(playerCount)}
               disabled={mp.lobbyPlayers.length < 1}
-              className="bg-amber-700 hover:bg-amber-600 disabled:bg-amber-950/40 disabled:text-amber-900/40 text-amber-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 border border-amber-600/40 shadow-lg"
+              className="bg-cyan-700 hover:bg-cyan-600 disabled:bg-blue-950/40 disabled:text-blue-900/40 text-cyan-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 border border-cyan-600/40 shadow-lg"
             >
               Iniciar Partida
               {mp.lobbyPlayers.length < playerCount && (
@@ -260,7 +260,7 @@ export default function SalaPage({ params }: PageProps) {
           )}
 
           {mp.role === 'guest' && (
-            <p className="text-amber-700/50 text-sm text-center animate-pulse">
+            <p className="text-blue-700/50 text-sm text-center animate-pulse">
               Aguardando o host iniciar...
             </p>
           )}

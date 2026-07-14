@@ -53,8 +53,8 @@ function getLandscapeSeats(n: number): Array<{ x: string; y: string } | null> {
 }
 
 const RAIL_STYLE = {
-  background: 'linear-gradient(145deg,#7a3a0a 0%,#5c2a07 50%,#7a3a0a 100%)',
-  boxShadow: '0 8px 40px rgba(0,0,0,0.7),inset 0 1px 3px rgba(255,200,100,0.15)',
+  background: 'linear-gradient(145deg,#0d1929 0%,#081320 50%,#0d1929 100%)',
+  boxShadow: '0 8px 40px rgba(0,0,0,0.85),inset 0 1px 3px rgba(0,212,255,0.08),0 0 0 1px rgba(0,212,255,0.12)',
 };
 
 export function GameBoard({
@@ -106,17 +106,17 @@ export function GameBoard({
   if (phase === 'game-end') {
     return (
       <div className="min-h-screen wood-bg flex items-center justify-center p-4">
-        <div className="bg-amber-950/90 border-2 border-amber-700/50 rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl">
+        <div className="bg-blue-950/90 border-2 border-cyan-700/40 rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl backdrop-blur-sm">
           <div className="text-6xl mb-4">🏆</div>
-          <h2 className="font-display font-black text-amber-200 text-3xl mb-2">
+          <h2 className="font-display font-black text-cyan-200 text-3xl mb-2">
             {winner?.id === humanId ? 'Você venceu!' : `${winner?.name} venceu!`}
           </h2>
-          <p className="text-amber-700/60 text-sm mb-6 uppercase tracking-widest">
+          <p className="text-blue-700/60 text-sm mb-6 uppercase tracking-widest">
             Rodada {round} de {maxRounds}
           </p>
           <button
             onClick={onRestart}
-            className="w-full bg-amber-700 hover:bg-amber-600 text-amber-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg border border-amber-600/50"
+            className="w-full bg-cyan-700 hover:bg-cyan-600 text-cyan-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg border border-cyan-600/50"
           >
             Jogar Novamente
           </button>
@@ -129,14 +129,14 @@ export function GameBoard({
 
   const headerJsx = (
     <div className="shrink-0 z-20 flex items-center justify-between px-3 py-2 bg-gradient-to-b from-black/65 to-transparent pointer-events-none">
-      <span className="font-display font-black text-amber-400 text-xl tracking-widest drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">
+      <span className="font-display font-black text-cyan-400 text-xl tracking-widest drop-shadow-[0_0_10px_rgba(0,212,255,0.35)]">
         FDP
       </span>
       <div className="flex items-center gap-1.5">
-        <div className="flex items-center gap-1 bg-black/40 rounded-full px-2.5 py-1 border border-amber-900/30">
-          <span className="text-amber-700/70 text-[10px]">Rodada</span>
-          <span className="text-amber-200 font-black text-xs">{round}</span>
-          <span className="text-amber-800/60 text-[10px]">/{maxRounds}</span>
+        <div className="flex items-center gap-1 bg-black/40 rounded-full px-2.5 py-1 border border-blue-900/40">
+          <span className="text-blue-600/70 text-[10px]">Rodada</span>
+          <span className="text-cyan-200 font-black text-xs">{round}</span>
+          <span className="text-blue-700/60 text-[10px]">/{maxRounds}</span>
         </div>
         {showTento && (
           <div className={`rounded-full px-2.5 py-1 border text-[10px] font-bold ${
@@ -150,7 +150,7 @@ export function GameBoard({
           </div>
         )}
       </div>
-      <span className="text-amber-700/60 text-[10px]">
+      <span className="text-blue-700/60 text-[10px]">
         {phase === 'bidding' ? '📋 Decl.' : (phase === 'playing' || phase === 'trick-end') ? '🃏 Jogo' : ''}
       </span>
     </div>
@@ -179,6 +179,7 @@ export function GameBoard({
               isTrickWinner={phase === 'trick-end' && player.id === trickWinnerId}
               manilhaValue={manilhaValue}
               showCards={round === 1}
+              bigCards={round === 1}
               compact
               small
               seat
@@ -198,7 +199,8 @@ export function GameBoard({
         isCurrentPlayer={phase === 'playing' && humanPlayer.id === currentPlayerId}
         isTrickWinner={phase === 'trick-end' && humanPlayer.id === trickWinnerId}
         manilhaValue={manilhaValue}
-        showCards={round !== 1}
+        showCards={false}
+        revealOnHover={round > 1}
         onCardClick={canPlayCard ? onCardPlay : undefined}
         playOrder={trickPlayOrder[humanPlayer.id]}
         hasPlayedInTrick={playedInTrick.has(humanPlayer.id)}
@@ -213,15 +215,15 @@ export function GameBoard({
         />
       )}
       {phase === 'bidding' && !isMyTurn && (
-        <p className="text-amber-700/60 text-sm animate-pulse">Aguardando declarações...</p>
+        <p className="text-blue-600/70 text-sm animate-pulse">Aguardando declarações...</p>
       )}
       {phase === 'playing' && isMyTurn && (
-        <p className="text-amber-300 text-sm font-bold animate-pulse tracking-widest uppercase">
+        <p className="text-cyan-300 text-sm font-bold animate-pulse tracking-widest uppercase">
           ✦ Sua vez ✦
         </p>
       )}
       {phase === 'playing' && !isMyTurn && (
-        <p className="text-amber-700/60 text-sm animate-pulse">Aguardando jogada...</p>
+        <p className="text-blue-600/70 text-sm animate-pulse">Aguardando jogada...</p>
       )}
     </>
   );

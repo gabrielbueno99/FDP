@@ -1,5 +1,6 @@
 'use client';
-import { Player, Value } from '../lib/types';
+import { useState } from 'react';
+import { Card, Player, Value } from '../lib/types';
 import { CardBack, CardComponent } from './CardComponent';
 import { getCardStrength } from '../lib/deck';
 
@@ -11,12 +12,64 @@ interface PlayerAreaProps {
   isTrickWinner: boolean;
   manilhaValue: Value | null;
   showCards: boolean;
+  revealOnHover?: boolean;
   onCardClick?: (cardId: string) => void;
   compact?: boolean;
   small?: boolean;
+  bigCards?: boolean;
   seat?: boolean;
   playOrder?: number;
   hasPlayedInTrick?: boolean;
+}
+
+// CSS 3D flip card — back facing by default, front reveals on hover of parent container.
+// The inner CardComponent is rendered without clickable so its own hover transforms
+// don't conflict with the perspective animation. Lift/click effects live on this wrapper.
+function FlipCard({
+  revealed,
+  card,
+  isManilha,
+  clickable,
+  onClick,
+}: {
+  revealed: boolean;
+  card: Card;
+  isManilha: boolean;
+  clickable: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      className={[
+        'w-20 h-28 shrink-0 transition-transform duration-150',
+        clickable && revealed
+          ? 'cursor-pointer hover:scale-110 hover:-translate-y-4 hover:z-10 hover:shadow-2xl hover:shadow-black/60'
+          : '',
+      ].join(' ')}
+      style={{ perspective: '500px' }}
+      onClick={clickable && revealed ? onClick : undefined}
+    >
+      <div
+        className="relative w-full h-full"
+        style={{
+          transformStyle: 'preserve-3d',
+          transition: 'transform 0.42s cubic-bezier(0.4,0,0.2,1)',
+          transform: revealed ? 'rotateY(0deg)' : 'rotateY(180deg)',
+        }}
+      >
+        <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden' }}>
+          {/* No clickable prop — hover effects are on the wrapper, not the card itself */}
+          <CardComponent card={card} isManilha={isManilha} size="lg" />
+        </div>
+        <div
+          className="absolute inset-0"
+          style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+        >
+          <CardBack size="lg" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Dots({ points, small }: { points: number; small?: boolean }) {
@@ -27,8 +80,8 @@ function Dots({ points, small }: { points: number; small?: boolean }) {
           key={i}
           className={`rounded-full border transition-all ${small ? 'w-2 h-2' : 'w-3 h-3'} ${
             i < points
-              ? 'bg-amber-400 border-amber-300 shadow-[0_0_4px_rgba(251,191,36,0.5)]'
-              : 'bg-transparent border-amber-800/30'
+              ? 'bg-cyan-400 border-cyan-300 shadow-[0_0_4px_rgba(0,212,255,0.5)]'
+              : 'bg-transparent border-blue-900/40'
           }`}
         />
       ))}
@@ -44,20 +97,23 @@ export function PlayerArea({
   isTrickWinner,
   manilhaValue,
   showCards,
+  revealOnHover,
   onCardClick,
   compact,
   small,
+  bigCards,
   seat,
   playOrder,
   hasPlayedInTrick,
 }: PlayerAreaProps) {
+  const [hovered, setHovered] = useState(false);
   const sortedHand = manilhaValue
     ? [...player.hand].sort((a, b) => getCardStrength(b, manilhaValue) - getCardStrength(a, manilhaValue))
     : [...player.hand];
 
   const highlight =
     isCurrentPlayer || isCurrentBidder
-      ? 'ring-2 ring-amber-400/70 ring-offset-1 ring-offset-transparent'
+      ? 'ring-2 ring-cyan-400/70 ring-offset-1 ring-offset-transparent'
       : isTrickWinner
       ? 'ring-2 ring-green-400/70 ring-offset-1 ring-offset-transparent'
       : '';
@@ -68,14 +124,14 @@ export function PlayerArea({
     return (
       <div className={`${highlight} ${elim}`}>
         {/* Mobile: horizontal pill with xs cards — hidden in seat mode */}
-        <div className={`${seat ? 'hidden' : 'sm:hidden'} flex items-center gap-2.5 rounded-xl px-3 py-2 bg-black/25 border border-amber-900/25`}>
+        <div className={`${seat ? 'hidden' : 'sm:hidden'} flex items-center gap-2.5 rounded-xl px-3 py-2 bg-black/30 border border-blue-900/30`}>
           <div className="flex flex-col gap-0.5 min-w-0">
             <div className="flex items-center gap-1">
-              <span className="text-amber-100 font-semibold text-xs truncate max-w-[72px]">
+              <span className="text-slate-100 font-semibold text-xs truncate max-w-[72px]">
                 {player.name}
               </span>
               {isDealer && (
-                <span className="bg-amber-700 text-amber-100 text-[8px] font-black px-1 py-px rounded-full leading-none">
+                <span className="bg-cyan-800 text-cyan-100 text-[8px] font-black px-1 py-px rounded-full leading-none">
                   D
                 </span>
               )}
@@ -83,7 +139,7 @@ export function PlayerArea({
                 <span className={`text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border leading-none ${
                   hasPlayedInTrick
                     ? 'bg-green-900/60 text-green-400 border-green-700/40'
-                    : 'bg-amber-900/70 text-amber-300 border-amber-700/50'
+                    : 'bg-blue-900/70 text-cyan-300 border-blue-700/50'
                 }`}>
                   {playOrder}
                 </span>
@@ -91,14 +147,14 @@ export function PlayerArea({
             </div>
             <Dots points={player.points} small />
             {player.bid !== null && (
-              <div className="flex items-center gap-0.5 bg-black/40 border border-amber-700/30 rounded-full px-2 py-0.5 self-start">
-                <span className="text-amber-300 font-black text-xs">{player.bid}</span>
-                <span className="text-amber-800/50 text-[10px]">/</span>
+              <div className="flex items-center gap-0.5 bg-black/40 border border-blue-800/30 rounded-full px-2 py-0.5 self-start">
+                <span className="text-cyan-300 font-black text-xs">{player.bid}</span>
+                <span className="text-blue-700/50 text-[10px]">/</span>
                 <span className="text-green-400 font-black text-xs">{player.tricksWon}</span>
               </div>
             )}
             {isCurrentBidder && player.bid === null && (
-              <span className="text-amber-400 text-[10px] animate-pulse">Decl...</span>
+              <span className="text-cyan-400 text-[10px] animate-pulse">Decl...</span>
             )}
           </div>
           {!player.eliminated && (
@@ -118,11 +174,11 @@ export function PlayerArea({
         </div>
 
         {/* Desktop: column layout — always shown in seat mode */}
-        <div className={`${seat ? 'flex' : 'hidden sm:flex'} flex-col items-center gap-2 rounded-xl px-3 py-2 bg-black/25 border border-amber-900/25`}>
+        <div className={`${seat ? 'flex' : 'hidden sm:flex'} flex-col items-center gap-2 rounded-xl px-3 py-2 bg-black/30 border border-blue-900/30`}>
           <div className="flex items-center gap-1.5">
-            <span className="text-amber-100 font-semibold text-sm">{player.name}</span>
+            <span className="text-slate-100 font-semibold text-sm">{player.name}</span>
             {isDealer && (
-              <span className="bg-amber-700 text-amber-100 text-[9px] font-black px-1.5 py-0.5 rounded-full">
+              <span className="bg-cyan-800 text-cyan-100 text-[9px] font-black px-1.5 py-0.5 rounded-full">
                 D
               </span>
             )}
@@ -131,7 +187,7 @@ export function PlayerArea({
               <span className={`text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border leading-none ${
                 hasPlayedInTrick
                   ? 'bg-green-900/60 text-green-400 border-green-700/40'
-                  : 'bg-amber-900/70 text-amber-300 border-amber-700/50'
+                  : 'bg-blue-900/70 text-cyan-300 border-blue-700/50'
               }`}>
                 {playOrder}
               </span>
@@ -139,14 +195,14 @@ export function PlayerArea({
           </div>
           <Dots points={player.points} small={small} />
           {player.bid !== null && (
-            <div className="flex items-center gap-1 bg-black/40 border border-amber-700/30 rounded-full px-2 py-0.5">
-              <span className="text-amber-300 font-black text-xs">{player.bid}</span>
-              <span className="text-amber-800/50 text-[10px] mx-0.5">·</span>
+            <div className="flex items-center gap-1 bg-black/40 border border-blue-800/30 rounded-full px-2 py-0.5">
+              <span className="text-cyan-300 font-black text-xs">{player.bid}</span>
+              <span className="text-blue-700/50 text-[10px] mx-0.5">·</span>
               <span className="text-green-400 font-black text-xs">{player.tricksWon}</span>
             </div>
           )}
           {isCurrentBidder && player.bid === null && (
-            <div className="text-amber-400 text-xs animate-pulse">Declarando...</div>
+            <div className="text-cyan-400 text-xs animate-pulse">Declarando...</div>
           )}
           {!player.eliminated && (
             <div className="flex gap-0.5 flex-wrap justify-center">
@@ -156,10 +212,10 @@ export function PlayerArea({
                       key={card.id}
                       card={card}
                       isManilha={card.value === manilhaValue}
-                      size={small ? 'xs' : 'sm'}
+                      size={bigCards ? 'md' : small ? 'xs' : 'sm'}
                     />
                   ))
-                : sortedHand.map((_, i) => <CardBack key={i} size={small ? 'xs' : 'sm'} />)}
+                : sortedHand.map((_, i) => <CardBack key={i} size={bigCards ? 'md' : small ? 'xs' : 'sm'} />)}
             </div>
           )}
         </div>
@@ -171,13 +227,13 @@ export function PlayerArea({
   return (
     <div
       className={`flex flex-col items-center gap-2 rounded-2xl px-4 py-3 transition-all
-        bg-black/25 border border-amber-900/25 backdrop-blur-sm w-full
+        bg-black/30 border border-blue-900/30 backdrop-blur-sm w-full
         ${elim} ${highlight}`}
     >
       <div className="flex items-center gap-2">
-        <span className="text-amber-100 font-semibold text-sm">{player.name}</span>
+        <span className="text-slate-100 font-semibold text-sm">{player.name}</span>
         {isDealer && (
-          <span className="bg-amber-700 text-amber-100 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow">
+          <span className="bg-cyan-800 text-cyan-100 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow">
             D
           </span>
         )}
@@ -186,7 +242,7 @@ export function PlayerArea({
           <span className={`text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border leading-none ${
             hasPlayedInTrick
               ? 'bg-green-900/60 text-green-400 border-green-700/40'
-              : 'bg-amber-900/70 text-amber-300 border-amber-700/50'
+              : 'bg-blue-900/70 text-cyan-300 border-blue-700/50'
           }`}>
             {playOrder}
           </span>
@@ -196,21 +252,27 @@ export function PlayerArea({
       <Dots points={player.points} />
 
       {player.bid !== null && (
-        <div className="flex items-center gap-1.5 bg-black/40 border border-amber-700/30 rounded-full px-4 py-1.5">
-          <span className="text-amber-600/60 text-xs uppercase tracking-wider">Tentos</span>
-          <span className="text-amber-300 font-black text-lg leading-none">{player.bid}</span>
-          <span className="text-amber-800/50 text-sm mx-0.5">·</span>
+        <div className="flex items-center gap-1.5 bg-black/40 border border-blue-800/30 rounded-full px-4 py-1.5">
+          <span className="text-blue-600/60 text-xs uppercase tracking-wider">Tentos</span>
+          <span className="text-cyan-300 font-black text-lg leading-none">{player.bid}</span>
+          <span className="text-blue-700/50 text-sm mx-0.5">·</span>
           <span className="text-green-400 font-black text-lg leading-none">{player.tricksWon}</span>
           <span className="text-green-800/50 text-xs uppercase tracking-wider">ganhos</span>
         </div>
       )}
 
       {isCurrentBidder && player.bid === null && (
-        <div className="text-amber-400 text-xs font-semibold animate-pulse">Declarando...</div>
+        <div className="text-cyan-400 text-xs font-semibold animate-pulse">Declarando...</div>
       )}
 
       {!player.eliminated && (
-        <div className="flex gap-1.5 justify-center overflow-x-auto pb-1 max-w-full">
+        <div
+          className="flex gap-1.5 justify-center pt-6 pb-3 px-4"
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          onTouchStart={() => setHovered(true)}
+          onTouchEnd={() => setHovered(false)}
+        >
           {showCards
             ? sortedHand.map((card) => (
                 <CardComponent
@@ -222,15 +284,31 @@ export function PlayerArea({
                   size="lg"
                 />
               ))
-            : sortedHand.map((card, i) => (
-                <CardBack
-                  key={i}
-                  size="lg"
-                  clickable={!!onCardClick}
-                  onClick={() => onCardClick?.(card.id)}
-                />
-              ))}
+            : revealOnHover
+              ? sortedHand.map((card) => (
+                  <FlipCard
+                    key={card.id}
+                    revealed={hovered}
+                    card={card}
+                    isManilha={card.value === manilhaValue}
+                    clickable={!!onCardClick && hovered}
+                    onClick={() => onCardClick?.(card.id)}
+                  />
+                ))
+              : sortedHand.map((card, i) => (
+                  <CardBack
+                    key={i}
+                    size="lg"
+                    clickable={!!onCardClick}
+                    onClick={() => onCardClick?.(card.id)}
+                  />
+                ))}
         </div>
+      )}
+      {revealOnHover && !hovered && !player.eliminated && player.hand.length > 0 && (
+        <p className="text-blue-700/50 text-[10px] animate-pulse tracking-widest uppercase">
+          passe o mouse para ver suas cartas
+        </p>
       )}
     </div>
   );

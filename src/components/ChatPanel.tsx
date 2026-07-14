@@ -9,12 +9,12 @@ interface ChatPanelProps {
 }
 
 const COLORS = [
-  'text-amber-400',
+  'text-cyan-400',
   'text-blue-400',
   'text-green-400',
   'text-pink-400',
   'text-purple-400',
-  'text-cyan-400',
+  'text-violet-400',
   'text-orange-400',
   'text-rose-400',
 ];
@@ -38,7 +38,7 @@ export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
         {messages.length === 0 && (
-          <p className="text-amber-900/50 text-xs text-center mt-6">
+          <p className="text-blue-800/50 text-xs text-center mt-6">
             Nenhuma mensagem ainda...
           </p>
         )}
@@ -52,8 +52,8 @@ export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
               )}
               <div className={`max-w-[82%] px-3 py-1.5 rounded-2xl text-sm leading-snug break-words ${
                 isMine
-                  ? 'bg-amber-700/70 text-amber-100 rounded-br-none'
-                  : 'bg-black/50 text-amber-100 rounded-bl-none border border-amber-900/30'
+                  ? 'bg-cyan-800/70 text-cyan-100 rounded-br-none'
+                  : 'bg-black/50 text-slate-100 rounded-bl-none border border-blue-900/30'
               }`}>
                 {msg.text}
               </div>
@@ -63,7 +63,7 @@ export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex gap-2 px-3 py-2.5 border-t border-amber-900/30 shrink-0">
+      <div className="flex gap-2 px-3 py-2.5 border-t border-blue-900/30 shrink-0">
         <input
           type="text"
           value={input}
@@ -71,12 +71,12 @@ export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
           onKeyDown={(e) => e.key === 'Enter' && submit()}
           placeholder="Mensagem..."
           maxLength={200}
-          className="flex-1 bg-black/40 border border-amber-800/40 text-amber-100 rounded-xl px-3 py-2 text-sm outline-none focus:border-amber-600/70 transition-colors placeholder-amber-900/50"
+          className="flex-1 bg-black/40 border border-blue-800/40 text-slate-100 rounded-xl px-3 py-2 text-sm outline-none focus:border-cyan-600/70 transition-colors placeholder-blue-900/50"
         />
         <button
           onClick={submit}
           disabled={!input.trim()}
-          className="bg-amber-700 hover:bg-amber-600 disabled:bg-amber-950/50 disabled:text-amber-900/40 text-amber-100 font-bold px-4 rounded-xl transition-colors border border-amber-600/40"
+          className="bg-cyan-700 hover:bg-cyan-600 disabled:bg-blue-950/50 disabled:text-blue-900/40 text-cyan-100 font-bold px-4 rounded-xl transition-colors border border-cyan-600/40"
         >
           ↑
         </button>

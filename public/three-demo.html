@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Three.js Card Demo — FDP</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #030712; overflow: hidden; font-family: system-ui, sans-serif; }
+    canvas { display: block; width: 100vw; height: 100dvh; }
+
+    #ui {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      z-index: 10;
+    }
+    button {
+      background: rgba(0,212,255,0.15);
+      border: 1px solid rgba(0,212,255,0.4);
+      color: #22d3ee;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      letter-spacing: 0.04em;
+    }
+    button:hover  { background: rgba(0,212,255,0.25); }
+    button:active { transform: scale(0.96); }
+
+    #hint {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(0,212,255,0.5);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="hint">Clique em uma carta para virá-la · Passe o mouse para destacar</div>
+
+  <div id="ui">
+    <button id="btn-flip-all">Virar Todas</button>
+    <button id="btn-deal">Distribuir</button>
+    <button id="btn-reset">Resetar</button>
+  </div>
+
+  <!-- Three.js via CDN — importmap so the code uses bare `import * as THREE from 'three'` -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.171.0/build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // ─── Shared geometry ─────────────────────────────────────────────────────
+    // Guideline 1: PlaneGeometry = 2 triangles, 4 vertices — minimum possible.
+    const CARD_W = 0.714;
+    const CARD_H = 1.0;
+    const SHARED_GEOMETRY = new THREE.PlaneGeometry(CARD_W, CARD_H);
+
+    // ─── Texture helpers ─────────────────────────────────────────────────────
+    function makeCardTexture(drawFn) {
+      const size   = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      drawFn(ctx, size);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.minFilter      = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+      return tex;
+    }
+
+    // ─── Card faces drawn with Canvas 2D ─────────────────────────────────────
+    const SUITS   = ['♣', '♥', '♠', '♦'];
+    const VALUES  = ['A', '2', '3', '4', '5', '6', '7', 'J', 'Q', 'K'];
+    const RED     = ['♥', '♦'];
+
+    function drawFront(ctx, size, suit, value) {
+      const radius = size * 0.08;
+
+      // Card background
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(0, 0, size, size, radius);
+      ctx.fill();
+
+      // Thin border
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      const isRed = RED.includes(suit);
+      const color = isRed ? '#dc2626' : '#111827';
+
+      // Corner value + suit
+      ctx.fillStyle = color;
+      ctx.font      = `bold ${size * 0.22}px system-ui`;
+      ctx.textAlign = 'left';
+      ctx.fillText(value, size * 0.08, size * 0.28);
+      ctx.font      = `${size * 0.18}px system-ui`;
+      ctx.fillText(suit,  size * 0.09, size * 0.44);
+
+      // Center suit (big)
+      ctx.font      = `${size * 0.42}px system-ui`;
+      ctx.textAlign = 'center';
+      ctx.fillText(suit, size / 2, size * 0.67);
+    }
+
+    function drawBack(ctx, size) {
+      // Dark background
+      ctx.fillStyle = '#0d1929';
+      ctx.beginPath();
+      ctx.roundRect(0, 0, size, size, size * 0.08);
+      ctx.fill();
+
+      // Cyan grid pattern — matches the futuristic UI palette
+      ctx.strokeStyle = 'rgba(0,212,255,0.12)';
+      ctx.lineWidth   = 1;
+      const step = size / 8;
+      for (let i = 0; i <= size; i += step) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
+      }
+
+      // Center FDP logo
+      ctx.fillStyle = 'rgba(0,212,255,0.7)';
+      ctx.font      = `bold ${size * 0.22}px serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('FDP', size / 2, size * 0.56);
+
+      // Cyan border glow
+      ctx.strokeStyle = 'rgba(0,212,255,0.35)';
+      ctx.lineWidth   = 4;
+      ctx.beginPath();
+      ctx.roundRect(4, 4, size - 8, size - 8, size * 0.07);
+      ctx.stroke();
+    }
+
+    // ─── Card3D class ─────────────────────────────────────────────────────────
+    // Guideline 2: MeshPhongMaterial — one per face per card.
+    // Guideline 3: exponential lerp flip, no external lib.
+    class Card3D {
+      constructor(suit, value) {
+        this.meta = { suit, value };
+
+        const frontTex = makeCardTexture((ctx, s) => drawFront(ctx, s, suit, value));
+        const backTex  = makeCardTexture((ctx, s) => drawBack(ctx, s));
+
+        const frontMat = new THREE.MeshPhongMaterial({ map: frontTex, side: THREE.FrontSide,  shininess: 35 });
+        const backMat  = new THREE.MeshPhongMaterial({ map: backTex,  side: THREE.BackSide,   shininess: 20 });
+
+        this.frontMesh = new THREE.Mesh(SHARED_GEOMETRY, frontMat);
+        this.backMesh  = new THREE.Mesh(SHARED_GEOMETRY, backMat);
+
+        // userData.card → O(1) lookup after a raycaster hit
+        this.frontMesh.userData.card = this;
+        this.backMesh.userData.card  = this;
+
+        this.group = new THREE.Group();
+        this.group.add(this.frontMesh, this.backMesh);
+
+        // Flip state
+        this._angle    = 0;
+        this._target   = 0;        // 0 = back | Math.PI = front
+        this._flipping = false;
+
+        // Hover state (slight lift)
+        this._hovered  = false;
+        this._yOffset  = 0;
+        this._yTarget  = 0;
+      }
+
+      // Guideline 3: smooth lerp-based flip
+      flip(showFront) {
+        this._target   = showFront ? Math.PI : 0;
+        this._flipping = true;
+      }
+
+      get isFaceUp() { return this._target === Math.PI; }
+
+      setHovered(on) {
+        this._hovered = on;
+        this._yTarget = on ? 0.15 : 0;
+      }
+
+      // Called each frame by the scene loop — frame-rate independent
+      update(dt) {
+        // Flip animation
+        if (this._flipping) {
+          const ease    = 1 - Math.exp(-8 * dt);
+          this._angle   = THREE.MathUtils.lerp(this._angle, this._target, ease);
+          this.group.rotation.y = this._angle;
+          if (Math.abs(this._angle - this._target) < 0.002) {
+            this._angle           = this._target;
+            this.group.rotation.y = this._target;
+            this._flipping        = false;
+          }
+        }
+
+        // Hover lift animation
+        this._yOffset = THREE.MathUtils.lerp(this._yOffset, this._yTarget, 1 - Math.exp(-12 * dt));
+        this.group.position.y += this._yOffset - this.group.position.y + this.group.position.y;
+        // simpler: just store base position and add offset
+        this.group.position.y = this._baseY + this._yOffset;
+      }
+
+      dispose() {
+        [this.frontMesh, this.backMesh].forEach(m => {
+          m.material.map?.dispose();
+          m.material.dispose();
+        });
+      }
+    }
+
+    // ─── Scene setup ──────────────────────────────────────────────────────────
+    const canvas = document.getElementById('canvas');
+
+    // Renderer — guideline 4 settings
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias:       false,       // biggest mobile perf win
+      powerPreference: 'low-power',
+      precision:       'mediump',
+      alpha:           false,
+    });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+    renderer.shadowMap.enabled = false; // guideline 4: no shadow maps
+
+    const scene  = new THREE.Scene();
+    scene.background = new THREE.Color(0x071626);
+
+    const camera = new THREE.PerspectiveCamera(50, canvas.clientWidth / canvas.clientHeight, 0.1, 50);
+    camera.position.set(0, 0, 8);
+
+    // Guideline 4: AmbientLight + single DirectionalLight, castShadow = false
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    dirLight.position.set(4, 8, 6);
+    dirLight.castShadow = false;
+    scene.add(dirLight);
+
+    // Rim light — optional, matches the cyan UI palette
+    const rimLight = new THREE.DirectionalLight(0x00d4ff, 0.2);
+    rimLight.position.set(-5, -2, 3);
+    scene.add(rimLight);
+
+    // ─── Cards ───────────────────────────────────────────────────────────────
+    let cards = [];
+
+    function createHand() {
+      // Remove old cards
+      for (const c of cards) { scene.remove(c.group); c.dispose(); }
+      cards = [];
+
+      const hand = [
+        { suit: '♠', value: 'A'  },
+        { suit: '♥', value: 'K'  },
+        { suit: '♦', value: 'Q'  },
+        { suit: '♣', value: 'J'  },
+        { suit: '♥', value: '7'  },
+      ];
+
+      const n    = hand.length;
+      const span = (n - 1) * 1.05;
+
+      hand.forEach((h, i) => {
+        const card = new Card3D(h.suit, h.value);
+        const x    = -span / 2 + i * 1.05;
+        card.group.position.set(x, 0, 0);
+        card._baseY = 0;
+        // Fan rotation — slight arc for aesthetics
+        card.group.rotation.z = (i - (n - 1) / 2) * 0.04;
+        scene.add(card.group);
+        cards.push(card);
+      });
+    }
+
+    createHand();
+
+    // ─── Raycaster (guideline 5) ──────────────────────────────────────────────
+    const raycaster = new THREE.Raycaster();
+    const pointer   = new THREE.Vector2(-2, -2);
+    let   hoveredCard = null;
+
+    function toNDC(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x =  ((clientX - rect.left) / rect.width)  * 2 - 1;
+      pointer.y = -((clientY - rect.top)  / rect.height) * 2 + 1;
+    }
+
+    function pick() {
+      raycaster.setFromCamera(pointer, camera);
+      // intersectObjects checks all meshes in the array — O(n) but n is tiny here
+      const meshPool = cards.flatMap(c => [c.frontMesh, c.backMesh]);
+      const hits     = raycaster.intersectObjects(meshPool);
+      return hits.length > 0 ? hits[0].object.userData.card : null;
+    }
+
+    canvas.addEventListener('pointermove', (e) => {
+      toNDC(e.clientX, e.clientY);
+      const hit = pick();
+
+      if (hoveredCard && hoveredCard !== hit) hoveredCard.setHovered(false);
+      if (hit && hit !== hoveredCard) hit.setHovered(true);
+      hoveredCard = hit;
+
+      canvas.style.cursor = hit ? 'pointer' : 'default';
+    });
+
+    canvas.addEventListener('pointerdown', (e) => {
+      toNDC(e.clientX, e.clientY);
+      const hit = pick();
+      if (hit) hit.flip(!hit.isFaceUp);
+    });
+
+    canvas.addEventListener('pointerleave', () => {
+      if (hoveredCard) { hoveredCard.setHovered(false); hoveredCard = null; }
+      pointer.set(-2, -2);
+    });
+
+    // ─── UI buttons ───────────────────────────────────────────────────────────
+    let allFaceUp = false;
+    document.getElementById('btn-flip-all').addEventListener('click', () => {
+      allFaceUp = !allFaceUp;
+      cards.forEach(c => c.flip(allFaceUp));
+    });
+
+    document.getElementById('btn-deal').addEventListener('click', () => {
+      // Staggered deal animation — flip cards one by one with a delay
+      cards.forEach((c, i) => {
+        c.flip(false); // reset to back first
+        setTimeout(() => c.flip(true), i * 200);
+      });
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', createHand);
+
+    // ─── Resize ───────────────────────────────────────────────────────────────
+    new ResizeObserver(() => {
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    }).observe(canvas);
+
+    // ─── Render loop ──────────────────────────────────────────────────────────
+    const clock = new THREE.Clock();
+    (function tick() {
+      requestAnimationFrame(tick);
+      const dt = clock.getDelta();
+      for (const card of cards) card.update(dt);
+      renderer.render(scene, camera);
+    })();
+  </script>
+</body>
+</html>

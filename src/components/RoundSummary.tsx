@@ -31,12 +31,12 @@ export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-amber-950/95 border-2 border-amber-800/50 rounded-2xl p-6 max-w-md w-full shadow-2xl">
-        <h2 className="font-display font-black text-amber-200 text-2xl text-center mb-1">
+    <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-blue-950/95 border-2 border-cyan-700/30 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+        <h2 className="font-display font-black text-cyan-200 text-2xl text-center mb-1">
           Fim da Rodada {round}
         </h2>
-        <p className="text-amber-700/60 text-xs text-center mb-5 uppercase tracking-widest">
+        <p className="text-blue-700/60 text-xs text-center mb-5 uppercase tracking-widest">
           {round} de {maxRounds} rodadas
         </p>
 
@@ -53,8 +53,8 @@ export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps
                 }`}
               >
                 <div>
-                  <div className="text-amber-100 font-semibold text-sm">{r.name}</div>
-                  <div className="text-amber-700/70 text-xs">
+                  <div className="text-slate-100 font-semibold text-sm">{r.name}</div>
+                  <div className="text-blue-600/70 text-xs">
                     Declarou {r.bid} · Fez {r.tricksWon}
                   </div>
                   {r.newlyEliminated && (
@@ -73,8 +73,8 @@ export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps
                         key={i}
                         className={`w-2.5 h-2.5 rounded-full border ${
                           i < (player?.points ?? 0)
-                            ? 'bg-amber-400 border-amber-300'
-                            : 'bg-transparent border-amber-800/30'
+                            ? 'bg-cyan-400 border-cyan-300'
+                            : 'bg-transparent border-blue-900/40'
                         }`}
                       />
                     ))}
@@ -86,16 +86,16 @@ export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps
         </div>
 
         {/* Progress bar */}
-        <div className="h-1 bg-amber-900/40 rounded-full overflow-hidden mb-3">
+        <div className="h-1 bg-blue-900/40 rounded-full overflow-hidden mb-3">
           <div
-            className="h-full bg-amber-500/70 rounded-full transition-all duration-1000 ease-linear"
+            className="h-full bg-cyan-500/70 rounded-full transition-all duration-1000 ease-linear"
             style={{ width: `${(countdown / AUTO_ADVANCE_SECS) * 100}%` }}
           />
         </div>
 
         <button
           onClick={onNext}
-          className="w-full bg-amber-700 hover:bg-amber-600 text-amber-100 font-bold py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg border border-amber-600/50"
+          className="w-full bg-cyan-700 hover:bg-cyan-600 text-cyan-100 font-bold py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg border border-cyan-600/50"
         >
           {isMultiplayer ? `Pronto (${countdown}s)` : `Próxima Rodada (${countdown}s)`}
         </button>

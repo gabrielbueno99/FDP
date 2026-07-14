@@ -43,11 +43,11 @@ export default function Home() {
     <div className="min-h-screen wood-bg flex flex-col items-center justify-center p-6 gap-8">
       {/* Title */}
       <div className="text-center space-y-2">
-        <h1 className="font-display font-black text-amber-400 text-8xl tracking-widest drop-shadow-[0_0_24px_rgba(251,191,36,0.25)]">
+        <h1 className="font-display font-black text-cyan-400 text-8xl tracking-widest drop-shadow-[0_0_24px_rgba(0,212,255,0.35)]">
           FDP
         </h1>
-        <div className="h-px w-48 mx-auto bg-gradient-to-r from-transparent via-amber-700/50 to-transparent" />
-        <p className="text-amber-800/70 text-xs tracking-[0.25em] uppercase">
+        <div className="h-px w-48 mx-auto bg-gradient-to-r from-transparent via-cyan-700/50 to-transparent" />
+        <p className="text-blue-700/70 text-xs tracking-[0.25em] uppercase">
           Filho da Puta — o jogo de cartas
         </p>
       </div>
@@ -62,7 +62,7 @@ export default function Home() {
         ].map((s, i) => (
           <div
             key={i}
-            className={`w-14 h-20 bg-white rounded-xl flex items-center justify-center text-3xl shadow-xl border border-amber-200/30 ${s.rotate}`}
+            className={`w-14 h-20 bg-white rounded-xl flex items-center justify-center text-3xl shadow-xl border border-blue-300/10 ${s.rotate}`}
           >
             <span className={s.color}>{s.suit}</span>
           </div>
@@ -70,11 +70,11 @@ export default function Home() {
       </div>
 
       {/* Solo panel */}
-      <div className="bg-black/30 border border-amber-800/35 rounded-2xl p-6 w-full max-w-xs flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
-        <h2 className="text-amber-200 font-bold text-lg text-center tracking-wide">Jogar Solo</h2>
+      <div className="bg-black/35 border border-blue-900/35 rounded-2xl p-6 w-full max-w-xs flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
+        <h2 className="text-cyan-200 font-bold text-lg text-center tracking-wide">Jogar Solo</h2>
 
         <div className="flex flex-col gap-2">
-          <label className="text-amber-800/70 text-xs uppercase tracking-widest text-center">
+          <label className="text-blue-700/70 text-xs uppercase tracking-widest text-center">
             Número de jogadores
           </label>
           <div className="flex gap-1.5 justify-center flex-wrap">
@@ -85,31 +85,31 @@ export default function Home() {
                 className={[
                   'w-10 h-10 rounded-xl font-bold text-sm transition-all border',
                   playerCount === n
-                    ? 'bg-amber-600 text-white border-amber-500 scale-110 shadow-[0_0_12px_rgba(217,119,6,0.35)]'
-                    : 'bg-amber-950/50 text-amber-600 border-amber-800/30 hover:border-amber-600/50 hover:text-amber-300',
+                    ? 'bg-cyan-700 text-white border-cyan-600 scale-110 shadow-[0_0_12px_rgba(0,212,255,0.3)]'
+                    : 'bg-blue-950/50 text-blue-500 border-blue-800/30 hover:border-cyan-700/50 hover:text-cyan-300',
                 ].join(' ')}
               >
                 {n}
               </button>
             ))}
           </div>
-          <p className="text-amber-900/60 text-xs text-center">
+          <p className="text-blue-800/60 text-xs text-center">
             Você vs {playerCount - 1} bot{playerCount > 2 ? 's' : ''}
           </p>
         </div>
 
         <button
           onClick={handleStartSolo}
-          className="bg-amber-700 hover:bg-amber-600 text-amber-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg border border-amber-600/40"
+          className="bg-cyan-700 hover:bg-cyan-600 text-cyan-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg border border-cyan-600/40"
         >
           Iniciar Partida
         </button>
       </div>
 
       {/* Online panel */}
-      <div className="bg-black/30 border border-amber-800/35 rounded-2xl p-6 w-full max-w-xs flex flex-col gap-4 backdrop-blur-sm shadow-2xl">
-        <h2 className="text-amber-200 font-bold text-lg text-center tracking-wide">Jogar Online</h2>
-        <p className="text-amber-800/60 text-sm text-center">
+      <div className="bg-black/35 border border-blue-900/35 rounded-2xl p-6 w-full max-w-xs flex flex-col gap-4 backdrop-blur-sm shadow-2xl">
+        <h2 className="text-cyan-200 font-bold text-lg text-center tracking-wide">Jogar Online</h2>
+        <p className="text-blue-700/60 text-sm text-center">
           Crie uma sala e compartilhe o link com seus amigos
         </p>
         <button
@@ -120,7 +120,7 @@ export default function Home() {
         </button>
       </div>
 
-      <p className="text-amber-900/45 text-xs text-center max-w-xs">
+      <p className="text-blue-900/45 text-xs text-center max-w-xs">
         Declare quantos tentos vai fazer. Quem errar perde 1 ponto. Começa com 5. Último sobrevivente vence.
       </p>
     </div>

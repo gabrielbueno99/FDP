@@ -10,8 +10,8 @@ interface BidPanelProps {
 
 export function BidPanel({ cardsInRound, forbiddenBid, onBid, tentoDiff, bidsPlaced }: BidPanelProps) {
   return (
-    <div className="bg-black/35 border border-amber-800/40 rounded-2xl p-4 flex flex-col items-center gap-3 backdrop-blur-sm shadow-xl">
-      <p className="text-amber-300 font-semibold text-sm tracking-wide">
+    <div className="bg-black/40 border border-blue-900/40 rounded-2xl p-4 flex flex-col items-center gap-3 backdrop-blur-sm shadow-xl">
+      <p className="text-cyan-300 font-semibold text-sm tracking-wide">
         Quantos tentos você vai fazer?
       </p>
 
@@ -48,7 +48,7 @@ export function BidPanel({ cardsInRound, forbiddenBid, onBid, tentoDiff, bidsPla
                 'w-11 h-11 rounded-full font-bold text-sm transition-all border shadow',
                 isForbidden
                   ? 'bg-gray-900/50 text-gray-600 border-gray-700/30 cursor-not-allowed opacity-40'
-                  : 'bg-amber-700 hover:bg-amber-500 text-amber-100 border-amber-600/70 hover:scale-110 active:scale-95 hover:shadow-[0_0_10px_rgba(251,191,36,0.25)]',
+                  : 'bg-cyan-800 hover:bg-cyan-600 text-cyan-100 border-cyan-700/60 hover:scale-110 active:scale-95 hover:shadow-[0_0_12px_rgba(0,212,255,0.3)]',
               ].join(' ')}
             >
               {i}
