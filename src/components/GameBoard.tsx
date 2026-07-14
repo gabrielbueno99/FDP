@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useState } from 'react';
 import { GameState } from '../lib/types';
 import { PlayerArea } from './PlayerArea';
 import { TrickArea } from './TrickArea';
@@ -17,24 +18,44 @@ interface GameBoardProps {
   isMultiplayer?: boolean;
 }
 
-// Fixed seat positions (x%, y% of viewport) keyed by player.id.
-// Player 0 is always at the bottom; others spread clockwise.
-// Table occupies: top 13% → 48% (35% tall), left 3% → right 3% (94% wide).
-// Center y ≈ 30.5%.
-function getAllSeats(n: number): Array<{ x: string; y: string }> {
-  const configs: Record<number, Array<[number, number]>> = {
-    2: [[50, 51], [50, 10]],
-    3: [[50, 51], [85, 30], [15, 30]],
-    4: [[50, 51], [89, 30], [50, 10], [11, 30]],
-    5: [[50, 51], [88, 43], [72, 10], [28, 10], [12, 43]],
-    6: [[50, 51], [89, 43], [84, 11], [50, 7], [16, 11], [11, 43]],
-    7: [[50, 51], [89, 47], [88, 17], [66, 7], [34, 7], [12, 17], [11, 47]],
+// Portrait: % of the table-zone container.
+// Container: 94%vw wide, paddingTop=70px, then oval paddingBottom=40% (2.5:1 ratio).
+// Container height ≈ 70 + 40%×94%vw. Oval center-y ≈ 66%.
+// Index = player.id. Null = human (rendered in bottom panel instead).
+function getPortraitSeats(n: number): Array<{ x: string; y: string } | null> {
+  const cfg: Record<number, Array<[number, number] | null>> = {
+    2: [null, [50, 14]],
+    3: [null, [75, 14], [25, 14]],
+    4: [null, [88, 66], [50, 14], [12, 66]],
+    5: [null, [88, 80], [71, 14], [29, 14], [12, 80]],
+    6: [null, [88, 80], [78, 14], [50, 14], [22, 14], [12, 80]],
+    7: [null, [88, 85], [88, 48], [65, 14], [35, 14], [12, 48], [12, 85]],
   };
-  return (configs[Math.min(n, 7)] ?? configs[2]).map(([x, y]) => ({
-    x: `${x}%`,
-    y: `${y}%`,
-  }));
+  return (cfg[Math.min(n, 7)] ?? cfg[4]).map(
+    (item) => (item ? { x: `${item[0]}%`, y: `${item[1]}%` } : null)
+  );
 }
+
+// Landscape: % of the left-zone container (56%vw wide, h-dvh minus header tall).
+// Index = player.id. Null = human (rendered in right panel instead).
+function getLandscapeSeats(n: number): Array<{ x: string; y: string } | null> {
+  const cfg: Record<number, Array<[number, number] | null>> = {
+    2: [null, [50, 10]],
+    3: [null, [76, 10], [24, 10]],
+    4: [null, [88, 50], [50, 10], [12, 50]],
+    5: [null, [88, 65], [72, 10], [28, 10], [12, 65]],
+    6: [null, [88, 65], [80, 10], [50, 7], [20, 10], [12, 65]],
+    7: [null, [88, 75], [88, 32], [67, 7], [33, 7], [12, 32], [12, 75]],
+  };
+  return (cfg[Math.min(n, 7)] ?? cfg[4]).map(
+    (item) => (item ? { x: `${item[0]}%`, y: `${item[1]}%` } : null)
+  );
+}
+
+const RAIL_STYLE = {
+  background: 'linear-gradient(145deg,#7a3a0a 0%,#5c2a07 50%,#7a3a0a 100%)',
+  boxShadow: '0 8px 40px rgba(0,0,0,0.7),inset 0 1px 3px rgba(255,200,100,0.15)',
+};
 
 export function GameBoard({
   state,
@@ -53,9 +74,16 @@ export function GameBoard({
     trickWinnerId, manilhaValue, winner, trickLeaderId,
   } = state;
 
+  const [isLandscape, setIsLandscape] = useState(false);
+  useEffect(() => {
+    const check = () => setIsLandscape(window.innerWidth > window.innerHeight);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   const humanPlayer = players.find((p) => p.id === humanId);
   const canPlayCard = phase === 'playing' && isMyTurn;
-  const seats = getAllSeats(players.length);
 
   const activePlayers = players.filter((p) => !p.eliminated);
   const playedInTrick = new Set(state.currentTrick.map((pc) => pc.playerId));
@@ -97,59 +125,44 @@ export function GameBoard({
     );
   }
 
-  return (
-    <div className="h-screen wood-bg relative overflow-hidden select-none">
+  // ── Shared sub-elements ──────────────────────────────────
 
-      {/* ── Header ─────────────────────────────────────────── */}
-      <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-2.5 bg-gradient-to-b from-black/70 to-transparent pointer-events-none">
-        <span className="font-display font-black text-amber-400 text-2xl tracking-widest drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">
-          FDP
-        </span>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-black/40 rounded-full px-3 py-1 border border-amber-900/30">
-            <span className="text-amber-700/70 text-xs">Rodada</span>
-            <span className="text-amber-200 font-black text-sm">{round}</span>
-            <span className="text-amber-800/60 text-xs">/{maxRounds}</span>
+  const headerJsx = (
+    <div className="shrink-0 z-20 flex items-center justify-between px-3 py-2 bg-gradient-to-b from-black/65 to-transparent pointer-events-none">
+      <span className="font-display font-black text-amber-400 text-xl tracking-widest drop-shadow-[0_0_10px_rgba(251,191,36,0.3)]">
+        FDP
+      </span>
+      <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 bg-black/40 rounded-full px-2.5 py-1 border border-amber-900/30">
+          <span className="text-amber-700/70 text-[10px]">Rodada</span>
+          <span className="text-amber-200 font-black text-xs">{round}</span>
+          <span className="text-amber-800/60 text-[10px]">/{maxRounds}</span>
+        </div>
+        {showTento && (
+          <div className={`rounded-full px-2.5 py-1 border text-[10px] font-bold ${
+            tentoDiff > 0
+              ? 'bg-red-950/70 border-red-700/50 text-red-400'
+              : tentoDiff < 0
+                ? 'bg-yellow-950/70 border-yellow-700/50 text-yellow-400'
+                : 'bg-green-950/70 border-green-700/50 text-green-400'
+          }`}>
+            {tentoDiff > 0 ? `Sobra ${tentoDiff}` : tentoDiff < 0 ? `Falta ${Math.abs(tentoDiff)}` : 'Fechado!'}
           </div>
-          {showTento && (
-            <div className={`rounded-full px-3 py-1 border text-xs font-bold ${
-              tentoDiff > 0
-                ? 'bg-red-950/70 border-red-700/50 text-red-400'
-                : tentoDiff < 0
-                  ? 'bg-yellow-950/70 border-yellow-700/50 text-yellow-400'
-                  : 'bg-green-950/70 border-green-700/50 text-green-400'
-            }`}>
-              {tentoDiff > 0 ? `Sobra ${tentoDiff}` : tentoDiff < 0 ? `Falta ${Math.abs(tentoDiff)}` : 'Fechado!'}
-            </div>
-          )}
-        </div>
-        <span className="text-amber-700/60 text-xs">
-          {phase === 'bidding' ? '📋 Declarações' : (phase === 'playing' || phase === 'trick-end') ? '🃏 Em jogo' : ''}
-        </span>
+        )}
       </div>
+      <span className="text-amber-700/60 text-[10px]">
+        {phase === 'bidding' ? '📋 Decl.' : (phase === 'playing' || phase === 'trick-end') ? '🃏 Jogo' : ''}
+      </span>
+    </div>
+  );
 
-      {/* ── Oval poker table (fatter: 94% wide × ~27% tall) ── */}
-      <div
-        className="absolute z-0"
-        style={{ top: '13%', bottom: '52%', left: '3%', right: '3%' }}
-      >
-        {/* Wooden rail */}
-        <div
-          className="absolute inset-0 rounded-[50%] shadow-2xl"
-          style={{
-            background: 'linear-gradient(145deg, #7a3a0a 0%, #5c2a07 50%, #7a3a0a 100%)',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.7), inset 0 1px 3px rgba(255,200,100,0.15)',
-          }}
-        />
-        {/* Felt surface */}
-        <div className="absolute inset-[10px] rounded-[50%] felt-center flex items-center justify-center overflow-hidden">
-          <TrickArea state={state} />
-        </div>
-      </div>
+  const portraitSeats = getPortraitSeats(players.length);
+  const landscapeSeats = getLandscapeSeats(players.length);
 
-      {/* ── All player seats (fixed by player.id, clockwise from bottom) ── */}
-      {/* Human is shown exclusively at the bottom panel, not at their seat */}
-      {players.filter((p) => p.id !== humanId).map((player) => {
+  const renderOpponents = (seats: ReturnType<typeof getPortraitSeats>) =>
+    players
+      .filter((p) => p.id !== humanId)
+      .map((player) => {
         const seat = seats[player.id];
         if (!seat) return null;
         return (
@@ -174,46 +187,113 @@ export function GameBoard({
             />
           </div>
         );
-      })}
+      });
 
-      {/* ── Human hand always at bottom for interaction ────── */}
-      {humanPlayer && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 w-full px-4 max-w-lg">
-          <PlayerArea
-            player={humanPlayer}
-            isDealer={humanPlayer.id === dealerPlayerId}
-            isCurrentBidder={phase === 'bidding' && humanPlayer.id === currentBidderId}
-            isCurrentPlayer={phase === 'playing' && humanPlayer.id === currentPlayerId}
-            isTrickWinner={phase === 'trick-end' && humanPlayer.id === trickWinnerId}
-            manilhaValue={manilhaValue}
-            showCards={round !== 1}
-            onCardClick={canPlayCard ? onCardPlay : undefined}
-            playOrder={trickPlayOrder[humanPlayer.id]}
-            hasPlayedInTrick={playedInTrick.has(humanPlayer.id)}
-          />
-
-          {phase === 'bidding' && isMyTurn && (
-            <BidPanel
-              cardsInRound={round}
-              forbiddenBid={forbiddenBid}
-              onBid={onBid}
-              tentoDiff={tentoDiff}
-              bidsPlaced={biddedPlayers.length}
-            />
-          )}
-          {phase === 'bidding' && !isMyTurn && (
-            <p className="text-amber-700/60 text-sm animate-pulse">Aguardando declarações...</p>
-          )}
-          {phase === 'playing' && isMyTurn && (
-            <p className="text-amber-300 text-sm font-bold animate-pulse tracking-widest uppercase">
-              ✦ Sua vez ✦
-            </p>
-          )}
-          {phase === 'playing' && !isMyTurn && (
-            <p className="text-amber-700/60 text-sm animate-pulse">Aguardando jogada...</p>
-          )}
-        </div>
+  const humanPanelContent = humanPlayer && (
+    <>
+      <PlayerArea
+        player={humanPlayer}
+        isDealer={humanPlayer.id === dealerPlayerId}
+        isCurrentBidder={phase === 'bidding' && humanPlayer.id === currentBidderId}
+        isCurrentPlayer={phase === 'playing' && humanPlayer.id === currentPlayerId}
+        isTrickWinner={phase === 'trick-end' && humanPlayer.id === trickWinnerId}
+        manilhaValue={manilhaValue}
+        showCards={round !== 1}
+        onCardClick={canPlayCard ? onCardPlay : undefined}
+        playOrder={trickPlayOrder[humanPlayer.id]}
+        hasPlayedInTrick={playedInTrick.has(humanPlayer.id)}
+      />
+      {phase === 'bidding' && isMyTurn && (
+        <BidPanel
+          cardsInRound={round}
+          forbiddenBid={forbiddenBid}
+          onBid={onBid}
+          tentoDiff={tentoDiff}
+          bidsPlaced={biddedPlayers.length}
+        />
       )}
+      {phase === 'bidding' && !isMyTurn && (
+        <p className="text-amber-700/60 text-sm animate-pulse">Aguardando declarações...</p>
+      )}
+      {phase === 'playing' && isMyTurn && (
+        <p className="text-amber-300 text-sm font-bold animate-pulse tracking-widest uppercase">
+          ✦ Sua vez ✦
+        </p>
+      )}
+      {phase === 'playing' && !isMyTurn && (
+        <p className="text-amber-700/60 text-sm animate-pulse">Aguardando jogada...</p>
+      )}
+    </>
+  );
+
+  // ── Landscape ─────────────────────────────────────────────
+  if (isLandscape) {
+    return (
+      <div className="h-dvh wood-bg flex flex-col select-none overflow-hidden">
+        {headerJsx}
+        <div className="flex-1 flex flex-row min-h-0">
+
+          {/* Left: oval table + opponents */}
+          <div className="relative" style={{ width: '56%' }}>
+            {/* Oval via absolute fill */}
+            <div className="absolute z-0" style={{ top: '6%', bottom: '6%', left: '5%', right: '5%' }}>
+              <div
+                className="absolute inset-0 rounded-[50%]"
+                style={RAIL_STYLE}
+              >
+                <div className="absolute inset-[10px] rounded-[50%] felt-center flex items-center justify-center overflow-hidden">
+                  <TrickArea state={state} />
+                </div>
+              </div>
+            </div>
+            {renderOpponents(landscapeSeats)}
+          </div>
+
+          {/* Right: human panel */}
+          <div
+            className="flex flex-col items-center justify-center gap-2 px-3 pb-2 overflow-y-auto"
+            style={{ width: '44%' }}
+          >
+            {humanPanelContent}
+          </div>
+        </div>
+        {phase === 'round-end' && (
+          <RoundSummary state={state} onNext={onNextRound} isMultiplayer={isMultiplayer} />
+        )}
+      </div>
+    );
+  }
+
+  // ── Portrait (default) ────────────────────────────────────
+  return (
+    <div className="h-dvh wood-bg flex flex-col select-none overflow-hidden">
+      {headerJsx}
+
+      {/* justify-center vertically balances table + hand on all screen heights */}
+      <div className="flex-1 flex flex-col min-h-0 justify-center gap-4 py-2">
+        {/* Table zone: paddingTop reserves space for top-edge players */}
+        <div className="relative shrink-0 mx-[3%]" style={{ paddingTop: '70px' }}>
+
+          {/* Oval via paddingBottom aspect-ratio trick (2.5:1) */}
+          <div className="relative w-full" style={{ paddingBottom: '40%' }}>
+            <div
+              className="absolute inset-0 rounded-[50%]"
+              style={RAIL_STYLE}
+            >
+              <div className="absolute inset-[10px] rounded-[50%] felt-center flex items-center justify-center overflow-hidden">
+                <TrickArea state={state} />
+              </div>
+            </div>
+          </div>
+
+          {renderOpponents(portraitSeats)}
+        </div>
+
+        {/* Human panel */}
+        <div className="shrink-0 px-4 pb-1 max-w-lg mx-auto w-full flex flex-col items-center gap-2">
+          {humanPanelContent}
+        </div>
+      </div>
 
       {phase === 'round-end' && (
         <RoundSummary state={state} onNext={onNextRound} isMultiplayer={isMultiplayer} />
