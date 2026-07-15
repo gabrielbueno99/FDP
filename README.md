@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FDP — Filho da Puta
 
-## Getting Started
+Jogo de cartas brasileiro (estilo "Fodinha") para jogar no navegador — solo contra bots ou online com amigos.
 
-First, run the development server:
+## Regras
+
+- Na rodada N, cada jogador recebe N cartas. Uma carta é virada (**vira**) e define a **manilha** (o valor seguinte).
+- Cada jogador declara quantas vazas (**tentos**) vai fazer. O dealer declara por último e não pode fechar a conta exata da rodada.
+- Errou a declaração, perde 1 ponto. Todos começam com 5. Zerou, está fora. Último sobrevivente vence.
+- A rodada 1 é às cegas: você vê a carta de todo mundo, menos a sua.
+
+## Rodando
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra [http://localhost:3000](http://localhost:3000). O modo solo funciona sem configuração nenhuma.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Modo online
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+O multiplayer usa [Supabase Realtime](https://supabase.com/docs/guides/realtime) (canais de broadcast — não precisa de banco). Crie um projeto gratuito no Supabase, copie `.env.example` para `.env.local` e preencha:
 
-## Learn More
+```
+NEXT_PUBLIC_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua-anon-key
+```
 
-To learn more about Next.js, take a look at the following resources:
+O criador da sala (host) é a autoridade do jogo: aplica as ações de todos, roda os bots e envia para cada jogador uma versão do estado só com o que ele pode ver.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Estrutura
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/lib/game.ts` — regras e transições de estado (puro, sem UI)
+- `src/lib/deck.ts` — baralho, força das cartas, manilha
+- `src/lib/ai.ts` — bots
+- `src/hooks/useGame.ts` — loop de jogo local/solo
+- `src/hooks/useMultiplayer.ts` — sala online (host autoritativo via Supabase Realtime)
+- `src/components/` — mesa, cartas, declaração, chat
