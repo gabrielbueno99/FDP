@@ -9,7 +9,14 @@ type Screen = 'home' | 'playing';
 export default function Home() {
   const [screen, setScreen] = useState<Screen>('home');
   const [playerCount, setPlayerCount] = useState(4);
+  const [joinCode, setJoinCode] = useState('');
   const router = useRouter();
+
+  const handleJoin = () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length < 4) return;
+    router.push(`/sala/${code}`);
+  };
 
   const { state, startGame, placeBid, playCard, nextRound, restart, forbiddenBid, isMyTurn, humanId } =
     useGame();
@@ -91,6 +98,31 @@ export default function Home() {
         >
           Criar sala online
         </button>
+
+        {/* Entrar por código */}
+        <div className="flex items-center gap-3 px-1">
+          <div className="h-px flex-1 bg-gold/20" />
+          <span className="text-cream/40 text-[11px] tracking-[2px]">OU ENTRE COM CÓDIGO</span>
+          <div className="h-px flex-1 bg-gold/20" />
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+            placeholder="Código da sala"
+            maxLength={5}
+            className="flex-1 min-w-0 h-13 rounded-xl bg-white/5 border border-gold/40 text-cream px-[18px] text-[15px] tracking-[3px] uppercase outline-none focus:border-gold transition-colors placeholder:text-cream/30 placeholder:tracking-normal"
+          />
+          <button
+            onClick={handleJoin}
+            disabled={joinCode.trim().length < 4}
+            className="h-13 px-6 rounded-xl border border-gold/45 text-cream font-semibold text-[15px] transition-all hover:bg-white/[0.04] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+          >
+            Entrar
+          </button>
+        </div>
 
         <p className="text-center text-cream/45 text-xs leading-normal mt-2">
           Declare seus tentos. Erre e perca uma vida.

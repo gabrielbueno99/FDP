@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChatMessage, GameState, PlayerAction } from '../lib/types';
+import { Card, ChatMessage, GameState, PlayerAction } from '../lib/types';
 import { supabase } from '../lib/supabase';
 import {
   advanceToNextRound,
@@ -8,8 +8,10 @@ import {
   applyCardPlay,
   getActivePlayers,
   initGame,
+  isLastBidder,
   startNextTrick,
 } from '../lib/game';
+import { getAIBid, getAIPlay } from '../lib/ai';
 
 export type MultiplayerRole = 'host' | 'guest' | 'connecting';
 
@@ -34,9 +36,41 @@ interface UseMultiplayerReturn {
   chatMessages: ChatMessage[];
   sendAction: (action: PlayerAction) => void;
   sendChat: (text: string) => void;
-  startGame: (totalPlayers: number) => void;
+  startGame: () => void;
   removeDisconnectedPlayer: () => void;
   disconnect: () => void;
+}
+
+const MAX_RECONNECT_ATTEMPTS = 10;
+// Presence flaps on flaky mobile connections; only pause the game if the
+// player stays gone for this long.
+const DISCONNECT_GRACE_MS = 5000;
+
+// Placeholder card used when hiding a hand from a client. Real ids encode the
+// card (e.g. "A-clubs"), so redacted cards must carry opaque ids too.
+function hiddenCard(id: string): Card {
+  return { id, suit: 'spades', value: '4' };
+}
+
+// The host holds the full game state; each guest only receives what they are
+// allowed to see. Round 1 is blind (you see everyone's card except your own),
+// so the target's own hand is stripped in round 1 — with `blind-{index}` ids
+// preserved so playing a face-down card still works. From round 2 on, other
+// players' hands are stripped instead.
+function redactStateFor(gs: GameState, targetId: number): GameState {
+  return {
+    ...gs,
+    players: gs.players.map((p) => {
+      if (p.id === targetId) {
+        if (gs.round === 1) {
+          return { ...p, hand: p.hand.map((_, i) => hiddenCard(`blind-${i}`)) };
+        }
+        return p;
+      }
+      if (gs.round === 1) return p;
+      return { ...p, hand: p.hand.map((_, i) => hiddenCard(`hidden-${p.id}-${i}`)) };
+    }),
+  };
 }
 
 export function useMultiplayer(
@@ -44,44 +78,91 @@ export function useMultiplayer(
   playerName: string | null,
   isHost: boolean
 ): UseMultiplayerReturn {
-  const [myPlayerId, setMyPlayerId] = useState<number | null>(isHost ? 0 : null);
+  const pidKey = `fdp-pid-${roomCode}`;
+  const hostStateKey = `fdp-host-state-${roomCode}`;
+  const hostLobbyKey = `fdp-host-lobby-${roomCode}`;
+
+  // Guests remember their seat across reloads, so refreshing the page
+  // rejoins the same game instead of creating a new player.
+  const [myPlayerId, setMyPlayerId] = useState<number | null>(() => {
+    if (isHost) return 0;
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem(pidKey);
+      if (saved !== null && !Number.isNaN(Number(saved))) return Number(saved);
+    }
+    return null;
+  });
+
+  // The host restores a game in progress after a page reload, so an F5 (or a
+  // crashed tab reopened) doesn't kill the table for everyone.
+  const [restoredHost] = useState(() => {
+    const empty = { game: null as GameState | null, lobby: null as LobbyPlayer[] | null, nextPlayerId: 1 };
+    if (!isHost || typeof window === 'undefined') return empty;
+    try {
+      const savedGame = sessionStorage.getItem(hostStateKey);
+      const savedLobby = sessionStorage.getItem(hostLobbyKey);
+      const meta = savedLobby
+        ? (JSON.parse(savedLobby) as { lobby: LobbyPlayer[]; nextPlayerId: number })
+        : null;
+      return {
+        game: savedGame ? (JSON.parse(savedGame) as GameState) : null,
+        lobby: meta?.lobby ?? null,
+        nextPlayerId: meta?.nextPlayerId ?? 1,
+      };
+    } catch {
+      return empty;
+    }
+  });
+
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>(
-    isHost && playerName ? [{ id: 0, name: playerName }] : []
+    restoredHost.lobby ?? (isHost && playerName ? [{ id: 0, name: playerName }] : [])
   );
-  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [gameState, setGameState] = useState<GameState | null>(restoredHost.game);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [disconnectedPlayer, setDisconnectedPlayer] = useState<DisconnectedPlayer | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const hostGameRef = useRef<GameState | null>(null);
-  const nextPlayerIdRef = useRef(1);
-  const clientIdRef = useRef(Math.random().toString(36).slice(2));
+  const hostGameRef = useRef<GameState | null>(restoredHost.game);
+  const nextPlayerIdRef = useRef(restoredHost.nextPlayerId);
+  const [clientId] = useState(() => Math.random().toString(36).slice(2));
+  const clientIdRef = useRef(clientId);
   const pendingNextRoundRef = useRef<Set<number>>(new Set());
   const lobbyPlayersRef = useRef<LobbyPlayer[]>(lobbyPlayers);
   const myPlayerIdRef = useRef<number | null>(myPlayerId);
   const disconnectedPlayerRef = useRef<DisconnectedPlayer | null>(null);
+  const isConnectedRef = useRef(false);
 
-  // Bug 1: track clientId → playerId so duplicate `join` retries don't create new players
+  // Track clientId → playerId so duplicate `join` retries don't create new players
   const clientPlayerMapRef = useRef<Map<string, number>>(new Map());
-  // Bug 1: sequence counter so out-of-order lobby broadcasts don't overwrite newer state
+  // Sequence counter so out-of-order lobby broadcasts don't overwrite newer state
   const lobbySeqRef = useRef(0);
   const lastLobbySeqRef = useRef(0);
 
-  // Bug 2: heartbeat interval to keep channel alive and let reconnecting guests recover
+  // Heartbeat interval keeps the channel alive and lets reconnecting guests recover
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Bot turn timer (host only)
+  const botTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleBotRef = useRef<(gs: GameState) => void>(() => {});
+  // Grace timers before a presence-leave counts as a real disconnect
+  const disconnectTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => { lobbyPlayersRef.current = lobbyPlayers; }, [lobbyPlayers]);
   useEffect(() => { myPlayerIdRef.current = myPlayerId; }, [myPlayerId]);
   useEffect(() => { disconnectedPlayerRef.current = disconnectedPlayer; }, [disconnectedPlayer]);
+  useEffect(() => { isConnectedRef.current = isConnected; }, [isConnected]);
 
   const send = useCallback((event: string, payload: Record<string, unknown>) => {
     channelRef.current?.send({ type: 'broadcast', event, payload });
   }, []);
 
+  // Host → guests: one redacted copy of the state per guest, never the full state.
   const broadcastState = useCallback((gs: GameState) => {
-    send('game_state', { state: gs });
+    for (const lp of lobbyPlayersRef.current) {
+      if (lp.id === 0) continue;
+      send('game_state', { state: redactStateFor(gs, lp.id), target: lp.id });
+    }
   }, [send]);
 
   // Sends the full lobby with the current sequence number
@@ -89,27 +170,82 @@ export function useMultiplayer(
     send('lobby', { players, seq: lobbySeqRef.current });
   }, [send]);
 
+  const persistHostLobby = useCallback(() => {
+    try {
+      sessionStorage.setItem(hostLobbyKey, JSON.stringify({
+        lobby: lobbyPlayersRef.current,
+        nextPlayerId: nextPlayerIdRef.current,
+      }));
+    } catch { /* storage full/unavailable — persistence is best-effort */ }
+  }, [hostLobbyKey]);
+
+  // Commit a new authoritative state on the host: store, render, broadcast,
+  // persist (so the host surviving a reload doesn't kill the game), and let
+  // bots take their turn if it's one.
+  const commitHostState = useCallback((gs: GameState) => {
+    hostGameRef.current = gs;
+    setGameState(gs);
+    broadcastState(gs);
+    try {
+      if (gs.phase === 'game-end') {
+        sessionStorage.removeItem(hostStateKey);
+      } else {
+        sessionStorage.setItem(hostStateKey, JSON.stringify(gs));
+      }
+    } catch { /* best-effort */ }
+    scheduleBotRef.current(gs);
+  }, [broadcastState, hostStateKey]);
+
+  const clearDisconnected = useCallback((playerId?: number) => {
+    const dp = disconnectedPlayerRef.current;
+    if (dp && (playerId === undefined || dp.id === playerId)) {
+      disconnectedPlayerRef.current = null;
+      setDisconnectedPlayer(null);
+      if (isHost) send('player_reconnected', { playerId: dp.id });
+    }
+  }, [isHost, send]);
+
+  const cancelDisconnectTimer = useCallback((playerId: number) => {
+    const t = disconnectTimersRef.current.get(playerId);
+    if (t) {
+      clearTimeout(t);
+      disconnectTimersRef.current.delete(playerId);
+    }
+  }, []);
+
   const applyHostAction = useCallback((action: PlayerAction, fromPlayerId: number) => {
     let gs = hostGameRef.current;
     if (!gs) return;
 
     if (action.type === 'bid') {
+      if (gs.phase !== 'bidding' || gs.currentBidderId !== fromPlayerId) return;
+      if (!Number.isInteger(action.value) || action.value < 0 || action.value > gs.round) return;
       gs = applyBid(gs, fromPlayerId, action.value);
     } else if (action.type === 'play') {
-      gs = applyCardPlay(gs, fromPlayerId, action.cardId);
+      if (gs.phase !== 'playing' || gs.currentPlayerId !== fromPlayerId) return;
+      let cardId = action.cardId;
+      // Round-1 blind plays arrive with opaque ids — map back to the real card
+      if (cardId.startsWith('blind-')) {
+        const player = gs.players.find((p) => p.id === fromPlayerId);
+        const idx = Number(cardId.slice('blind-'.length));
+        const real = player?.hand[idx];
+        if (!real) return;
+        cardId = real.id;
+      }
+      const player = gs.players.find((p) => p.id === fromPlayerId);
+      if (!player?.hand.some((c) => c.id === cardId)) return;
+      gs = applyCardPlay(gs, fromPlayerId, cardId);
       if (gs.phase === 'trick-end') {
         setTimeout(() => {
           if (!hostGameRef.current || hostGameRef.current.phase !== 'trick-end') return;
-          const next = startNextTrick(hostGameRef.current);
-          hostGameRef.current = next;
-          setGameState(next);
-          broadcastState(next);
+          commitHostState(startNextTrick(hostGameRef.current));
         }, 1600);
       }
     } else if (action.type === 'next_round') {
       pendingNextRoundRef.current.add(fromPlayerId);
-      const active = getActivePlayers(gs.players);
-      if (pendingNextRoundRef.current.size >= active.length) {
+      // Only humans confirm — bots would leave the game stuck forever
+      const activeHumans = getActivePlayers(gs.players).filter((p) => p.isHuman);
+      if (pendingNextRoundRef.current.size >= activeHumans.length) {
         pendingNextRoundRef.current.clear();
         gs = advanceToNextRound(gs);
       } else {
@@ -117,173 +253,323 @@ export function useMultiplayer(
       }
     }
 
-    hostGameRef.current = gs;
-    setGameState(gs);
-    broadcastState(gs);
-  }, [broadcastState]);
+    commitHostState(gs);
+  }, [commitHostState]);
+
+  // Host-side AI: when the current bidder/player is a bot, act after a delay.
+  const scheduleBot = useCallback((gs: GameState) => {
+    if (!isHost) return;
+    if (botTimerRef.current) clearTimeout(botTimerRef.current);
+
+    if (gs.phase === 'bidding') {
+      const bidder = gs.players.find((p) => p.id === gs.currentBidderId);
+      if (bidder && !bidder.isHuman && !bidder.eliminated) {
+        botTimerRef.current = setTimeout(() => {
+          const cur = hostGameRef.current;
+          if (!cur || cur.phase !== 'bidding' || cur.currentBidderId !== bidder.id) return;
+          const active = getActivePlayers(cur.players);
+          const existingBids = active.filter((p) => p.bid !== null).map((p) => p.bid!);
+          const curBidder = cur.players.find((p) => p.id === bidder.id)!;
+          const bid = getAIBid(
+            curBidder.hand,
+            cur.manilhaValue!,
+            existingBids,
+            cur.round,
+            isLastBidder(cur, bidder.id)
+          );
+          applyHostAction({ type: 'bid', value: bid }, bidder.id);
+        }, 800);
+      }
+    } else if (gs.phase === 'playing') {
+      const player = gs.players.find((p) => p.id === gs.currentPlayerId);
+      if (player && !player.isHuman && !player.eliminated) {
+        botTimerRef.current = setTimeout(() => {
+          const cur = hostGameRef.current;
+          if (!cur || cur.phase !== 'playing' || cur.currentPlayerId !== player.id) return;
+          const curPlayer = cur.players.find((p) => p.id === player.id)!;
+          if (curPlayer.hand.length === 0) return;
+          const card = getAIPlay(
+            curPlayer.hand,
+            cur.currentTrick,
+            cur.manilhaValue!,
+            curPlayer.bid ?? 0,
+            curPlayer.tricksWon
+          );
+          applyHostAction({ type: 'play', cardId: card.id }, player.id);
+        }, 1000);
+      }
+    }
+  }, [isHost, applyHostAction]);
+
+  useEffect(() => { scheduleBotRef.current = scheduleBot; }, [scheduleBot]);
 
   useEffect(() => {
     if (!playerName) return;
 
-    const channel = supabase.channel(`fdp-${roomCode}`);
-    channelRef.current = channel;
+    let disposed = false;
+    let reconnectAttempts = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let retryInterval: ReturnType<typeof setInterval> | null = null;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-    channel
-      // ── Game messages ──────────────────────────────────────────────
-      .on('broadcast', { event: 'join' }, ({ payload }) => {
-        if (!isHost) return;
-        const { clientId, name } = payload as { clientId: string; name: string };
+    const clearJoinTimers = () => {
+      if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+    };
 
-        // Bug 1 fix: if this clientId already has a player, just resend welcome + state
-        if (clientPlayerMapRef.current.has(clientId)) {
-          const existingId = clientPlayerMapRef.current.get(clientId)!;
-          send('welcome', { clientId, playerId: existingId });
-          broadcastLobby(lobbyPlayersRef.current);
-          if (hostGameRef.current) send('game_state', { state: hostGameRef.current });
-          return;
-        }
+    // Builds a fresh channel with all handlers. Called on mount and again on
+    // every reconnect attempt — Supabase channels can't be reused after error.
+    const connect = () => {
+      if (disposed) return;
 
-        const dp = disconnectedPlayerRef.current;
-        let playerId: number;
+      const channel = supabase.channel(`fdp-${roomCode}`);
+      channelRef.current = channel;
 
-        if (dp && dp.name === name) {
-          // Player is reconnecting — restore their old ID
-          playerId = dp.id;
-          disconnectedPlayerRef.current = null;
-          setDisconnectedPlayer(null);
-          send('player_reconnected', { playerId });
-        } else {
-          playerId = nextPlayerIdRef.current++;
-          const updated = [...lobbyPlayersRef.current, { id: playerId, name }];
-          lobbyPlayersRef.current = updated;
-          setLobbyPlayers(updated);
-          lobbySeqRef.current++;
-          broadcastLobby(updated);
-        }
+      channel
+        // ── Game messages ──────────────────────────────────────────────
+        .on('broadcast', { event: 'join' }, ({ payload }) => {
+          if (!isHost) return;
+          const { clientId: joinerId, name } = payload as { clientId: string; name: string };
 
-        clientPlayerMapRef.current.set(clientId, playerId);
-        send('welcome', { clientId, playerId });
-        if (hostGameRef.current) {
-          send('game_state', { state: hostGameRef.current });
-        }
-      })
-      .on('broadcast', { event: 'welcome' }, ({ payload }) => {
-        if (isHost) return;
-        const { clientId, playerId } = payload as { clientId: string; playerId: number };
-        if (clientId === clientIdRef.current) {
-          myPlayerIdRef.current = playerId;
-          setMyPlayerId(playerId);
-          if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
-          if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
-          channel.track({ playerId, name: playerName });
-        }
-      })
-      .on('broadcast', { event: 'lobby' }, ({ payload }) => {
-        if (isHost) return;
-        const { players, seq } = payload as { players: LobbyPlayer[]; seq?: number };
-        // Bug 1 fix: ignore stale out-of-order lobby broadcasts
-        if (seq !== undefined && seq <= lastLobbySeqRef.current) return;
-        if (seq !== undefined) lastLobbySeqRef.current = seq;
-        setLobbyPlayers(players);
-      })
-      .on('broadcast', { event: 'game_state' }, ({ payload }) => {
-        if (isHost) return;
-        setGameState((payload as { state: GameState }).state);
-      })
-      .on('broadcast', { event: 'action' }, ({ payload }) => {
-        if (!isHost) return;
-        const { action, fromPlayerId } = payload as { action: PlayerAction; fromPlayerId: number };
-        applyHostAction(action, fromPlayerId);
-      })
-      // Bug 2 fix: guest requests current state after reconnecting
-      .on('broadcast', { event: 'request_state' }, () => {
-        if (!isHost) return;
-        if (hostGameRef.current) broadcastState(hostGameRef.current);
-        broadcastLobby(lobbyPlayersRef.current);
-      })
-      // ── Chat ────────────────────────────────────────────────────────
-      .on('broadcast', { event: 'chat' }, ({ payload }) => {
-        setChatMessages((prev) => [...prev, payload as ChatMessage]);
-      })
-      // ── Disconnect events (broadcast so all players see the pause) ──
-      .on('broadcast', { event: 'player_disconnected' }, ({ payload }) => {
-        if (isHost) return;
-        const { playerId, name } = payload as { playerId: number; name: string };
-        setDisconnectedPlayer({ id: playerId, name });
-      })
-      .on('broadcast', { event: 'player_reconnected' }, () => {
-        if (isHost) return;
-        setDisconnectedPlayer(null);
-      })
-      // ── Presence: detect crashes / unexpected disconnects ───────────
-      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        if (!isHost) return;
-        const gs = hostGameRef.current;
-        if (!gs || gs.phase === 'game-end' || gs.phase === 'setup') return;
-
-        for (const p of leftPresences) {
-          const { playerId, name } = p as unknown as { playerId: number; name: string };
-          if (playerId === 0) continue;
-          const player = gs.players.find(pl => pl.id === playerId && !pl.eliminated);
-          if (player) {
-            const dp = { id: playerId, name: player.name ?? name };
-            disconnectedPlayerRef.current = dp;
-            setDisconnectedPlayer(dp);
-            send('player_disconnected', dp);
+          // If this clientId already has a player, just resend welcome + state
+          if (clientPlayerMapRef.current.has(joinerId)) {
+            const existingId = clientPlayerMapRef.current.get(joinerId)!;
+            send('welcome', { clientId: joinerId, playerId: existingId });
+            broadcastLobby(lobbyPlayersRef.current);
+            if (hostGameRef.current) broadcastState(hostGameRef.current);
+            return;
           }
-        }
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          setIsConnected(true);
 
-          if (isHost) {
-            channel.track({ playerId: 0, name: playerName });
+          const dp = disconnectedPlayerRef.current;
+          let playerId: number;
 
-            // Bug 2 fix: heartbeat every 12s keeps the channel alive and lets
-            // reconnecting guests recover the game state without needing to rejoin
-            if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-            heartbeatRef.current = setInterval(() => {
-              if (hostGameRef.current) broadcastState(hostGameRef.current);
-              else broadcastLobby(lobbyPlayersRef.current);
-            }, 12000);
+          if (dp && dp.name === name) {
+            // Player is reconnecting from a new session — restore their seat
+            playerId = dp.id;
+            cancelDisconnectTimer(playerId);
+            clearDisconnected(playerId);
           } else {
-            // Bug 2 fix: if we already have a player ID, we're reconnecting —
-            // request current state from host instead of re-joining
-            if (myPlayerIdRef.current !== null) {
+            playerId = nextPlayerIdRef.current++;
+            const updated = [...lobbyPlayersRef.current, { id: playerId, name }];
+            lobbyPlayersRef.current = updated;
+            setLobbyPlayers(updated);
+            lobbySeqRef.current++;
+            broadcastLobby(updated);
+            persistHostLobby();
+          }
+
+          clientPlayerMapRef.current.set(joinerId, playerId);
+          send('welcome', { clientId: joinerId, playerId });
+          if (hostGameRef.current) broadcastState(hostGameRef.current);
+        })
+        .on('broadcast', { event: 'welcome' }, ({ payload }) => {
+          if (isHost) return;
+          const { clientId: targetClient, playerId } = payload as { clientId: string; playerId: number };
+          if (targetClient === clientIdRef.current) {
+            myPlayerIdRef.current = playerId;
+            setMyPlayerId(playerId);
+            try { sessionStorage.setItem(pidKey, String(playerId)); } catch { /* best-effort */ }
+            clearJoinTimers();
+            channel.track({ playerId, name: playerName });
+          }
+        })
+        .on('broadcast', { event: 'lobby' }, ({ payload }) => {
+          if (isHost) return;
+          const { players, seq } = payload as { players: LobbyPlayer[]; seq?: number };
+          // Ignore stale out-of-order lobby broadcasts
+          if (seq !== undefined && seq <= lastLobbySeqRef.current) return;
+          if (seq !== undefined) lastLobbySeqRef.current = seq;
+          setLobbyPlayers(players);
+        })
+        .on('broadcast', { event: 'game_state' }, ({ payload }) => {
+          if (isHost) return;
+          const { state, target } = payload as { state: GameState; target?: number };
+          // States are per-player; only apply the copy addressed to us
+          if (target !== undefined && target !== myPlayerIdRef.current) return;
+          setGameState(state);
+        })
+        .on('broadcast', { event: 'action' }, ({ payload }) => {
+          if (!isHost) return;
+          const { action, fromPlayerId } = payload as { action: PlayerAction; fromPlayerId: number };
+          applyHostAction(action, fromPlayerId);
+        })
+        // Guest requests current state after reconnecting — also proof of life
+        .on('broadcast', { event: 'request_state' }, ({ payload }) => {
+          if (!isHost) return;
+          const { playerId } = (payload ?? {}) as { playerId?: number };
+          if (playerId !== undefined) {
+            cancelDisconnectTimer(playerId);
+            clearDisconnected(playerId);
+          }
+          if (hostGameRef.current) broadcastState(hostGameRef.current);
+          broadcastLobby(lobbyPlayersRef.current);
+        })
+        // ── Chat ────────────────────────────────────────────────────────
+        .on('broadcast', { event: 'chat' }, ({ payload }) => {
+          setChatMessages((prev) => [...prev, payload as ChatMessage]);
+        })
+        // ── Disconnect events (broadcast so all players see the pause) ──
+        .on('broadcast', { event: 'player_disconnected' }, ({ payload }) => {
+          if (isHost) return;
+          const { playerId, name } = payload as { playerId: number; name: string };
+          setDisconnectedPlayer({ id: playerId, name });
+        })
+        .on('broadcast', { event: 'player_reconnected' }, () => {
+          if (isHost) return;
+          setDisconnectedPlayer(null);
+        })
+        // ── Presence: detect crashes / unexpected disconnects ───────────
+        .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+          for (const p of leftPresences) {
+            const { playerId, name } = p as unknown as { playerId: number; name: string };
+
+            // Guests watch the host's presence so a dead host isn't a silent freeze
+            if (!isHost) {
+              if (playerId === 0) {
+                cancelDisconnectTimer(0);
+                const t = setTimeout(() => {
+                  disconnectTimersRef.current.delete(0);
+                  setDisconnectedPlayer({ id: 0, name: name ?? 'Host' });
+                }, DISCONNECT_GRACE_MS);
+                disconnectTimersRef.current.set(0, t);
+              }
+              continue;
+            }
+
+            const gs = hostGameRef.current;
+            if (!gs || gs.phase === 'game-end' || gs.phase === 'setup') continue;
+            if (playerId === 0) continue;
+            const player = gs.players.find(pl => pl.id === playerId && !pl.eliminated);
+            if (!player) continue;
+
+            // Grace period: flaky connections come right back — don't pause
+            // the table for a hiccup.
+            cancelDisconnectTimer(playerId);
+            const timer = setTimeout(() => {
+              disconnectTimersRef.current.delete(playerId);
+              const dp = { id: playerId, name: player.name ?? name };
+              disconnectedPlayerRef.current = dp;
+              setDisconnectedPlayer(dp);
+              send('player_disconnected', dp);
+            }, DISCONNECT_GRACE_MS);
+            disconnectTimersRef.current.set(playerId, timer);
+          }
+        })
+        .on('presence', { event: 'join' }, ({ newPresences }) => {
+          for (const p of newPresences) {
+            const { playerId } = p as unknown as { playerId: number };
+            if (playerId === undefined) continue;
+            cancelDisconnectTimer(playerId);
+            if (!isHost && playerId === 0 && disconnectedPlayerRef.current?.id === 0) {
+              setDisconnectedPlayer(null);
+              // Host is back — ask for the current state
               send('request_state', { playerId: myPlayerIdRef.current });
+            }
+            if (isHost) clearDisconnected(playerId);
+          }
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            reconnectAttempts = 0;
+            setIsConnected(true);
+            setError(null);
+
+            if (isHost) {
+              channel.track({ playerId: 0, name: playerName });
+              // Push state right away so guests recover fast after we return,
+              // and resume the bot loop in case it was a bot's turn.
+              if (hostGameRef.current) {
+                broadcastState(hostGameRef.current);
+                scheduleBotRef.current(hostGameRef.current);
+              }
+              broadcastLobby(lobbyPlayersRef.current);
+
+              // Heartbeat every 12s keeps the channel alive and lets
+              // reconnecting guests recover the game state without rejoining
+              if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+              heartbeatRef.current = setInterval(() => {
+                if (hostGameRef.current) broadcastState(hostGameRef.current);
+                else broadcastLobby(lobbyPlayersRef.current);
+              }, 12000);
+            } else {
+              // If we already have a player ID, we're reconnecting —
+              // request current state from host instead of re-joining
+              if (myPlayerIdRef.current !== null) {
+                channel.track({ playerId: myPlayerIdRef.current, name: playerName });
+                send('request_state', { playerId: myPlayerIdRef.current });
+                return;
+              }
+
+              const sendJoin = () => {
+                if (myPlayerIdRef.current !== null) return;
+                send('join', { clientId: clientIdRef.current, name: playerName });
+              };
+              sendJoin();
+              if (retryInterval) clearInterval(retryInterval);
+              retryInterval = setInterval(sendJoin, 2000);
+              if (timeoutId) clearTimeout(timeoutId);
+              timeoutId = setTimeout(() => {
+                if (retryInterval) clearInterval(retryInterval);
+                if (myPlayerIdRef.current === null) {
+                  setError('Não foi possível entrar na sala. Verifique se o código está correto e o host está online.');
+                }
+              }, 30000);
+            }
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            // Don't give up: tear the channel down and rebuild with backoff.
+            // Mobile browsers kill the socket whenever the tab is backgrounded.
+            setIsConnected(false);
+            if (disposed) return;
+
+            reconnectAttempts++;
+            if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+              setError('Sem conexão com a sala. Verifique sua internet e recarregue a página.');
               return;
             }
 
-            const sendJoin = () => {
-              if (myPlayerIdRef.current !== null) return;
-              send('join', { clientId: clientIdRef.current, name: playerName });
-            };
-            sendJoin();
-            if (retryInterval) clearInterval(retryInterval);
-            retryInterval = setInterval(sendJoin, 2000);
-            if (timeoutId) clearTimeout(timeoutId);
-            timeoutId = setTimeout(() => {
-              if (retryInterval) clearInterval(retryInterval);
-              if (myPlayerIdRef.current === null) {
-                setError('Não foi possível entrar na sala. Verifique se o código está correto e o host está online.');
-              }
-            }, 30000);
-          }
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          setError('Erro de conexão. Verifique sua internet e tente recarregar.');
-        }
-      });
+            clearJoinTimers();
+            if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+            supabase.removeChannel(channel);
+            if (channelRef.current === channel) channelRef.current = null;
 
-    return () => {
-      if (retryInterval) clearInterval(retryInterval);
-      if (timeoutId) clearTimeout(timeoutId);
-      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
-      supabase.removeChannel(channel);
+            const delay = Math.min(1000 * 2 ** (reconnectAttempts - 1), 10000);
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, delay);
+          }
+        });
     };
-  }, [roomCode, playerName, isHost, send, broadcastState, broadcastLobby, applyHostAction]);
+
+    connect();
+
+    // Reconnect immediately when the tab comes back to the foreground
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || disposed) return;
+      if (!isConnectedRef.current && !reconnectTimer) {
+        reconnectAttempts = 0;
+        if (channelRef.current) supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+        connect();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    const timersAtSetup = disconnectTimersRef.current;
+    return () => {
+      disposed = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      clearJoinTimers();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+      if (botTimerRef.current) { clearTimeout(botTimerRef.current); botTimerRef.current = null; }
+      for (const t of timersAtSetup.values()) clearTimeout(t);
+      timersAtSetup.clear();
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    };
+  }, [
+    roomCode, playerName, isHost, pidKey, send, broadcastState, broadcastLobby,
+    applyHostAction, cancelDisconnectTimer, clearDisconnected, persistHostLobby,
+  ]);
 
   const sendChat = useCallback((text: string) => {
     const msg: ChatMessage = {
@@ -305,21 +591,25 @@ export function useMultiplayer(
     }
   }, [isHost, applyHostAction, send]);
 
-  const startGame = useCallback((totalPlayers: number) => {
+  const startGame = useCallback(() => {
     if (!isHost) return;
-    const realCount = Math.min(lobbyPlayersRef.current.length, totalPlayers);
-    const gs = initGame(totalPlayers, realCount);
+    // Online is humans only — start with everyone who joined the lobby (no bots).
+    // Lobby ids are contiguous (host = 0, guests join as 1,2,…), so they map
+    // straight onto the freshly dealt players.
+    const lobby = lobbyPlayersRef.current;
+    const count = lobby.length;
+    if (count < 2) return;
+    const gs = initGame(count, count);
     const namedGs: GameState = {
       ...gs,
       players: gs.players.map((p) => ({
         ...p,
-        name: lobbyPlayersRef.current[p.id]?.name ?? p.name,
+        name: lobby.find((lp) => lp.id === p.id)?.name ?? p.name,
       })),
     };
-    hostGameRef.current = namedGs;
-    setGameState(namedGs);
-    broadcastState(namedGs);
-  }, [isHost, broadcastState]);
+    persistHostLobby();
+    commitHostState(namedGs);
+  }, [isHost, commitHostState, persistHostLobby]);
 
   const removeDisconnectedPlayer = useCallback(() => {
     if (!isHost) return;
@@ -340,10 +630,7 @@ export function useMultiplayer(
         if (afterPlay.phase === 'trick-end') {
           setTimeout(() => {
             if (!hostGameRef.current || hostGameRef.current.phase !== 'trick-end') return;
-            const next = startNextTrick(hostGameRef.current);
-            hostGameRef.current = next;
-            setGameState(next);
-            broadcastState(next);
+            commitHostState(startNextTrick(hostGameRef.current));
           }, 1600);
         }
       }
@@ -362,14 +649,12 @@ export function useMultiplayer(
       gs = { ...gs, phase: 'game-end', winner };
     }
 
-    hostGameRef.current = gs;
-    setGameState(gs);
-    broadcastState(gs);
+    commitHostState(gs);
 
     disconnectedPlayerRef.current = null;
     setDisconnectedPlayer(null);
     send('player_reconnected', {});
-  }, [isHost, broadcastState, send]);
+  }, [isHost, commitHostState, send]);
 
   const disconnect = useCallback(() => {
     if (channelRef.current) supabase.removeChannel(channelRef.current);
