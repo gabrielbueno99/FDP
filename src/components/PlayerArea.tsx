@@ -150,17 +150,17 @@ export function PlayerArea({
         ) : null}
         <Dots points={player.points} small />
         {!player.eliminated && player.hand.length > 0 && (
-          <div className="flex -space-x-3.5">
+          <div className={`flex ${bigCards ? '-space-x-5' : '-space-x-3.5'}`}>
             {showCards
               ? sortedHand.map((card) => (
                   <CardComponent
                     key={card.id}
                     card={card}
                     isManilha={card.value === manilhaValue}
-                    size={bigCards ? 'md' : 'xs'}
+                    size={bigCards ? 'sm' : 'xs'}
                   />
                 ))
-              : sortedHand.map((_, i) => <CardBack key={i} size={bigCards ? 'md' : 'xs'} />)}
+              : sortedHand.map((_, i) => <CardBack key={i} size={bigCards ? 'sm' : 'xs'} />)}
           </div>
         )}
       </div>
@@ -224,7 +224,12 @@ export function PlayerArea({
     </button>
   );
 
-  if (handOnly) return <div className={elim}>{fan}</div>;
+  if (handOnly) return (
+    <div className={`flex flex-col items-center ${elim}`}>
+      {canHide && <div className="mb-1.5">{hideToggle}</div>}
+      {fan}
+    </div>
+  );
 
   return (
     <div className={`flex flex-col items-center gap-2 w-full ${elim}`}>

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { GameState } from '../lib/types';
 import { SUIT_SYMBOLS, getCardStrength } from '../lib/deck';
+import { CardComponent } from './CardComponent';
 import { Dots, PlayerArea } from './PlayerArea';
 import { TrickArea } from './TrickArea';
 import { BidPanel } from './BidPanel';
@@ -257,19 +258,15 @@ export function GameBoard({
         <div className="shrink-0 z-20 flex items-center justify-between px-10 py-5">
           <div className="flex items-center gap-4">
             <span className="font-display text-cream text-[28px] leading-none">FDP</span>
-            {exitButton}
+            {!isMultiplayer && exitButton}
           </div>
           <div className="flex items-center gap-5">
             <span className="text-cream/60 text-[13px] tracking-[2px]">{roundLabel}</span>
             {tentoPill}
             {vira && (
-              <div className="flex items-center gap-2 px-3.5 py-2 border border-gold/30 rounded-full">
+              <div className="flex items-center gap-2.5 px-3.5 py-1.5 border border-gold/30 rounded-full">
                 <span className="text-cream/50 text-[11px] tracking-[2px]">VIRA</span>
-                <span className={`font-display text-lg leading-none ${
-                  vira.suit === 'hearts' || vira.suit === 'diamonds' ? 'text-danger' : 'text-cream'
-                }`}>
-                  {vira.value}{SUIT_SYMBOLS[vira.suit]}
-                </span>
+                <CardComponent card={vira} size="sm" />
                 <span className="text-gold text-[13px] font-semibold">manilha {manilhaValue}</span>
               </div>
             )}
@@ -338,6 +335,7 @@ export function GameBoard({
                   selectedCardId={selectedCardId}
                   handOnly
                   xlCards
+                  hideable
                 />
 
                 <div className="flex flex-col gap-2.5 items-center mb-3.5 w-64">
@@ -385,7 +383,7 @@ export function GameBoard({
       <div className="shrink-0 flex items-center justify-between px-4 pt-5 pb-1">
         <div className="flex items-center gap-2.5">
           <span className="font-display text-cream text-xl leading-none">FDP</span>
-          {exitButton}
+          {!isMultiplayer && exitButton}
         </div>
         <div className="flex items-center gap-2">
           <span className="text-cream/60 text-xs tracking-[1px]">{roundLabel}</span>
