@@ -4,6 +4,37 @@ import { useRouter } from 'next/navigation';
 import { useGame } from '../hooks/useGame';
 import { GameBoard } from '../components/GameBoard';
 
+function JoinByCode() {
+  const [code, setCode] = useState('');
+  const router = useRouter();
+
+  const handleJoin = () => {
+    const normalized = code.trim().toUpperCase();
+    if (normalized.length === 5) router.push(`/sala/${normalized}`);
+  };
+
+  return (
+    <div className="flex gap-2">
+      <input
+        type="text"
+        value={code}
+        onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5))}
+        onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+        placeholder="Código da sala"
+        maxLength={5}
+        className="flex-1 h-13 bg-white/[0.04] border border-gold/30 text-cream rounded-xl px-4 outline-none focus:border-gold/70 transition-colors placeholder-cream/25 text-center tracking-[0.25em] font-bold uppercase text-sm"
+      />
+      <button
+        onClick={handleJoin}
+        disabled={code.trim().length !== 5}
+        className="h-13 px-5 rounded-xl border border-gold/45 text-cream font-semibold text-[15px] transition-all hover:bg-white/[0.04] active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        Entrar
+      </button>
+    </div>
+  );
+}
+
 type Screen = 'home' | 'playing';
 
 export default function Home() {
@@ -91,6 +122,14 @@ export default function Home() {
         >
           Criar sala online
         </button>
+
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-gold/20" />
+          <span className="text-cream/30 text-xs tracking-widest uppercase">ou</span>
+          <div className="flex-1 h-px bg-gold/20" />
+        </div>
+
+        <JoinByCode />
 
         <p className="text-center text-cream/45 text-xs leading-normal mt-2">
           Declare seus tentos. Erre e perca uma vida.
