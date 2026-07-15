@@ -8,6 +8,18 @@ interface ChatPanelProps {
   onSend: (text: string) => void;
 }
 
+// Provocações prontas — um toque manda pra mesa
+const TAUNTS = [
+  'Chora mais!',
+  'Táca-le pau!',
+  'Essa doeu, hein?',
+  'Manilha na manga?',
+  'Amador…',
+  'Paga a rodada!',
+  'Vai de zero de novo?',
+  'FDP!',
+];
+
 export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -51,6 +63,18 @@ export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
           );
         })}
         <div ref={bottomRef} />
+      </div>
+
+      <div className="flex gap-1.5 px-3.5 pt-2 overflow-x-auto shrink-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {TAUNTS.map((t) => (
+          <button
+            key={t}
+            onClick={() => onSend(t)}
+            className="whitespace-nowrap text-[11.5px] px-2.5 py-1 rounded-full border border-white/12 text-cream/70 hover:text-cream hover:border-gold/50 active:scale-95 transition-all"
+          >
+            {t}
+          </button>
+        ))}
       </div>
 
       <div className="flex gap-2 px-3.5 py-2.5 border-t border-white/10 shrink-0">
