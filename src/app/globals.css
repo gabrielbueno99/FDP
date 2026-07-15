@@ -28,6 +28,10 @@ body {
   font-family: var(--font-instrument-sans), system-ui, sans-serif;
 }
 
+button {
+  cursor: pointer;
+}
+
 /* Lobby / telas de entrada — verde profundo vindo do topo */
 .lobby-bg {
   background: radial-gradient(120% 90% at 50% 0%, #14352a 0%, #0b1f18 55%, #071410 100%);
