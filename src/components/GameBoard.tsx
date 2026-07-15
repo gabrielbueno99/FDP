@@ -60,10 +60,15 @@ export function GameBoard({
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // Card ids are stable across rounds, so a stale selection would carry over —
+  // reset it whenever the round or phase changes (adjust-state-during-render).
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  useEffect(() => {
+  const [prevSelectionKey, setPrevSelectionKey] = useState('');
+  const selectionKey = `${round}-${phase}`;
+  if (selectionKey !== prevSelectionKey) {
+    setPrevSelectionKey(selectionKey);
     setSelectedCardId(null);
-  }, [round, phase]);
+  }
 
   const humanPlayer = players.find((p) => p.id === humanId);
   const canPlayCard = phase === 'playing' && isMyTurn;
