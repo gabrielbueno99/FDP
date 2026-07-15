@@ -1,4 +1,4 @@
-import { Card, GameState, Player, PlayedCard, RoundResult, Value } from './types';
+import { GameState, Player, PlayedCard, RoundResult } from './types';
 import { createDeck, getManilhaValue, getTrickWinnerId, shuffle } from './deck';
 
 export function getActivePlayers(players: Player[]): Player[] {
