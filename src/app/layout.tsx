@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Instrument_Serif, Instrument_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -17,7 +17,29 @@ const instrumentSans = Instrument_Sans({
 
 export const metadata: Metadata = {
   title: "FDP — Filho da Puta",
-  description: "O clássico jogo de cartas brasileiro",
+  description:
+    "O clássico jogo de cartas brasileiro. Declare seus tentos, blefe e seja o último de pé — solo contra bots ou online com os amigos.",
+  applicationName: "FDP",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "FDP",
+  },
+  openGraph: {
+    title: "FDP — Filho da Puta",
+    description:
+      "O clássico jogo de cartas brasileiro. Declare seus tentos, blefe e seja o último de pé.",
+    type: "website",
+    locale: "pt_BR",
+  },
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0b1f18",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
