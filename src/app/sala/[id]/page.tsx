@@ -133,10 +133,16 @@ export default function SalaPage({ params }: PageProps) {
   });
 
   const [nameInput, setNameInput] = useState<string | null>(playerName);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [showPlayers, setShowPlayers] = useState(false);
 
   const isHost = typeof window !== 'undefined' && sessionStorage.getItem('fdp-host-room') === roomCode;
 
   const mp = useMultiplayer(roomCode, nameInput, isHost);
+
+  useEffect(() => {
+    if (mp.wasKicked) router.push('/');
+  }, [mp.wasKicked, router]);
 
   const { state: gameState, placeBid, playCard, nextRound, humanId, forbiddenBid, isMyTurn } =
     useGame({
@@ -200,6 +206,11 @@ export default function SalaPage({ params }: PageProps) {
   );
 
   if (mp.gameState) {
+    const activePlayers = mp.lobbyPlayers.filter(p => {
+      const gs = mp.gameState!;
+      return !gs.players.find(gp => gp.id === p.id)?.eliminated;
+    });
+
     return (
       <>
         <GameBoard
@@ -220,6 +231,78 @@ export default function SalaPage({ params }: PageProps) {
             onRemove={mp.removeDisconnectedPlayer}
           />
         )}
+
+        {/* Floating actions: bottom-left */}
+        <div className="fixed bottom-4 left-3 z-40 flex flex-col items-start gap-2">
+          {isHost && showPlayers && (
+            <div className="w-60 bg-black/80 border border-white/10 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-md p-3 flex flex-col gap-2">
+              <span className="text-gold font-bold text-[10.5px] tracking-[1.5px] px-1">JOGADORES</span>
+              {activePlayers.filter(p => p.id !== 0).map(p => (
+                <div key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/[0.04]">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0"
+                    style={{ background: avatarColor(p.id), color: '#ead9ac' }}
+                  >
+                    {initials(p.name)}
+                  </div>
+                  <span className="text-cream text-sm flex-1 truncate">{p.name}</span>
+                  <button
+                    onClick={() => mp.kickPlayer(p.id)}
+                    className="text-danger/70 hover:text-danger text-xs px-1.5 py-0.5 rounded transition-colors"
+                    title="Remover jogador"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            {isHost && (
+              <button
+                onClick={() => setShowPlayers(v => !v)}
+                className="w-11 h-11 rounded-full border border-gold/40 bg-black/50 hover:border-gold active:scale-95 flex items-center justify-center shadow-xl transition-all text-gold text-base"
+                title="Gerenciar jogadores"
+              >
+                ≡
+              </button>
+            )}
+            <button
+              onClick={() => setConfirmLeave(true)}
+              className="w-11 h-11 rounded-full border border-danger/40 bg-black/50 hover:border-danger active:scale-95 flex items-center justify-center shadow-xl transition-all text-danger text-base"
+              title="Sair da partida"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {confirmLeave && (
+          <div className="fixed inset-0 z-50 bg-[rgba(7,20,16,0.88)] backdrop-blur-[3px] flex items-center justify-center p-5">
+            <div className="w-full max-w-sm text-center flex flex-col items-center gap-5">
+              <span className="font-display text-cream text-4xl leading-tight">Sair da partida?</span>
+              <span className="font-display italic text-gold/70 text-[15px]">
+                {isHost ? 'O jogo será encerrado para todos.' : 'Você será removido da mesa.'}
+              </span>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setConfirmLeave(false)}
+                  className="flex-1 h-13 rounded-xl border border-gold/45 text-cream font-semibold text-[15px] transition-all hover:bg-white/[0.04] active:scale-95"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => { mp.disconnect(); router.push('/'); }}
+                  className="flex-1 h-13 rounded-xl border border-danger/50 text-danger font-semibold text-[15px] transition-all hover:bg-card-red/10 active:scale-95"
+                >
+                  Sair
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {chatWidget}
       </>
     );
@@ -288,6 +371,15 @@ export default function SalaPage({ params }: PageProps) {
                   </span>
                 </div>
                 {p.id === mp.myPlayerId && <span className="text-gold text-base">♠</span>}
+                {isHost && p.id !== 0 && (
+                  <button
+                    onClick={() => mp.kickPlayer(p.id)}
+                    className="text-danger/50 hover:text-danger text-sm px-1.5 py-0.5 rounded transition-colors"
+                    title="Remover da sala"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             ))}
             {Array.from({ length: emptySeats }, (_, i) => (
@@ -322,9 +414,17 @@ export default function SalaPage({ params }: PageProps) {
               </>
             )}
             {mp.role === 'guest' && (
-              <p className="font-display italic text-gold text-[15px] text-center animate-pulse">
-                aguardando o anfitrião abrir o jogo…
-              </p>
+              <>
+                <p className="font-display italic text-gold text-[15px] text-center animate-pulse">
+                  aguardando o anfitrião abrir o jogo…
+                </p>
+                <button
+                  onClick={() => { mp.leaveLobby(); router.push('/'); }}
+                  className="h-11 rounded-xl border border-danger/40 text-danger/80 hover:text-danger font-semibold text-sm transition-all hover:border-danger/70 active:scale-95"
+                >
+                  Sair da sala
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -30,12 +30,15 @@ interface UseMultiplayerReturn {
   gameState: GameState | null;
   isConnected: boolean;
   error: string | null;
+  wasKicked: boolean;
   disconnectedPlayer: DisconnectedPlayer | null;
   chatMessages: ChatMessage[];
   sendAction: (action: PlayerAction) => void;
   sendChat: (text: string) => void;
   startGame: (totalPlayers: number) => void;
   removeDisconnectedPlayer: () => void;
+  kickPlayer: (playerId: number) => void;
+  leaveLobby: () => void;
   disconnect: () => void;
 }
 
@@ -51,6 +54,7 @@ export function useMultiplayer(
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wasKicked, setWasKicked] = useState(false);
   const [disconnectedPlayer, setDisconnectedPlayer] = useState<DisconnectedPlayer | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
@@ -207,6 +211,22 @@ export function useMultiplayer(
       .on('broadcast', { event: 'chat' }, ({ payload }) => {
         setChatMessages((prev) => [...prev, payload as ChatMessage]);
       })
+      // ── Kick / voluntary leave ──────────────────────────────────────
+      .on('broadcast', { event: 'kicked' }, ({ payload }) => {
+        if (isHost) return;
+        const { targetId } = payload as { targetId: number };
+        if (targetId === myPlayerIdRef.current) setWasKicked(true);
+      })
+      .on('broadcast', { event: 'leave_lobby' }, ({ payload }) => {
+        if (!isHost) return;
+        const { playerId } = payload as { playerId: number };
+        const updated = lobbyPlayersRef.current.filter(p => p.id !== playerId);
+        if (updated.length === lobbyPlayersRef.current.length) return;
+        lobbyPlayersRef.current = updated;
+        setLobbyPlayers(updated);
+        lobbySeqRef.current++;
+        broadcastLobby(updated);
+      })
       // ── Disconnect events (broadcast so all players see the pause) ──
       .on('broadcast', { event: 'player_disconnected' }, ({ payload }) => {
         if (isHost) return;
@@ -220,12 +240,25 @@ export function useMultiplayer(
       // ── Presence: detect crashes / unexpected disconnects ───────────
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
         if (!isHost) return;
-        const gs = hostGameRef.current;
-        if (!gs || gs.phase === 'game-end' || gs.phase === 'setup') return;
 
         for (const p of leftPresences) {
           const { playerId, name } = p as unknown as { playerId: number; name: string };
           if (playerId === 0) continue;
+
+          const gs = hostGameRef.current;
+          if (!gs || gs.phase === 'setup') {
+            const updated = lobbyPlayersRef.current.filter(lp => lp.id !== playerId);
+            if (updated.length !== lobbyPlayersRef.current.length) {
+              lobbyPlayersRef.current = updated;
+              setLobbyPlayers(updated);
+              lobbySeqRef.current++;
+              broadcastLobby(updated);
+            }
+            continue;
+          }
+
+          if (gs.phase === 'game-end') continue;
+
           const player = gs.players.find(pl => pl.id === playerId && !pl.eliminated);
           if (player) {
             const dp = { id: playerId, name: player.name ?? name };
@@ -371,6 +404,63 @@ export function useMultiplayer(
     send('player_reconnected', {});
   }, [isHost, broadcastState, send]);
 
+  const kickPlayer = useCallback((playerId: number) => {
+    if (!isHost) return;
+    send('kicked', { targetId: playerId });
+
+    const updated = lobbyPlayersRef.current.filter(p => p.id !== playerId);
+    lobbyPlayersRef.current = updated;
+    setLobbyPlayers(updated);
+    lobbySeqRef.current++;
+    broadcastLobby(updated);
+
+    let gs = hostGameRef.current;
+    if (!gs) return;
+
+    if (gs.phase === 'bidding' && gs.currentBidderId === playerId) {
+      gs = applyBid(gs, playerId, 0);
+    } else if (gs.phase === 'playing' && gs.currentPlayerId === playerId) {
+      const player = gs.players.find(p => p.id === playerId);
+      if (player?.hand.length) {
+        const afterPlay = applyCardPlay(gs, playerId, player.hand[0].id);
+        gs = afterPlay;
+        if (afterPlay.phase === 'trick-end') {
+          setTimeout(() => {
+            if (!hostGameRef.current || hostGameRef.current.phase !== 'trick-end') return;
+            const next = startNextTrick(hostGameRef.current);
+            hostGameRef.current = next;
+            setGameState(next);
+            broadcastState(next);
+          }, 1600);
+        }
+      }
+    }
+
+    gs = {
+      ...gs,
+      players: gs.players.map(p =>
+        p.id === playerId ? { ...p, eliminated: true, hand: [] } : p
+      ),
+    };
+
+    const remaining = getActivePlayers(gs.players);
+    if (remaining.length <= 1) {
+      const winner = remaining[0] ?? [...gs.players].sort((a, b) => b.points - a.points)[0] ?? null;
+      gs = { ...gs, phase: 'game-end', winner };
+    }
+
+    hostGameRef.current = gs;
+    setGameState(gs);
+    broadcastState(gs);
+  }, [isHost, broadcastLobby, broadcastState, send]);
+
+  const leaveLobby = useCallback(() => {
+    if (myPlayerIdRef.current !== null) {
+      send('leave_lobby', { playerId: myPlayerIdRef.current });
+    }
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+  }, [send]);
+
   const disconnect = useCallback(() => {
     if (channelRef.current) supabase.removeChannel(channelRef.current);
   }, []);
@@ -382,12 +472,15 @@ export function useMultiplayer(
     gameState,
     isConnected,
     error,
+    wasKicked,
     disconnectedPlayer,
     chatMessages,
     sendAction,
     sendChat,
     startGame,
     removeDisconnectedPlayer,
+    kickPlayer,
+    leaveLobby,
     disconnect,
   };
 }
