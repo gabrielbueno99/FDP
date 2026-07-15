@@ -15,22 +15,30 @@ const AUTO_ADVANCE_SECS = 5;
 export function RoundSummary({ state, humanId, onNext, isMultiplayer }: RoundSummaryProps) {
   const { roundResults, players, round, maxRounds } = state;
   const [countdown, setCountdown] = useState(AUTO_ADVANCE_SECS);
+  const firedRef = useRef(false);
   const onNextRef = useRef(onNext);
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
 
+  // onNext advances the parent's game state, so it must fire from a timer
+  // callback — never inside the setCountdown updater, which runs during React's
+  // render and throws "Cannot update a component while rendering".
   useEffect(() => {
     const interval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          onNextRef.current();
-          return 0;
-        }
-        return prev - 1;
-      });
+      setCountdown((prev) => Math.max(0, prev - 1));
     }, 1000);
-    return () => clearInterval(interval);
+    const done = setTimeout(() => {
+      if (firedRef.current) return;
+      firedRef.current = true;
+      onNextRef.current();
+    }, AUTO_ADVANCE_SECS * 1000);
+    return () => { clearInterval(interval); clearTimeout(done); };
   }, []);
+
+  const confirm = () => {
+    if (firedRef.current) return;
+    firedRef.current = true;
+    onNext();
+  };
 
   const mine = roundResults.find((r) => r.playerId === humanId);
   const eliminatedNow = roundResults.filter((r) => r.newlyEliminated);
@@ -126,7 +134,7 @@ export function RoundSummary({ state, humanId, onNext, isMultiplayer }: RoundSum
             />
           </div>
           <button
-            onClick={onNext}
+            onClick={confirm}
             className="btn-gold h-13 rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95"
           >
             {isMultiplayer
