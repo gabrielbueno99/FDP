@@ -230,7 +230,7 @@ export function GameBoard3D({
 
       {/* ── Round summary overlay ──────────────────────────────────────────── */}
       {phase === 'round-end' && (
-        <RoundSummary state={state} onNext={onNextRound} isMultiplayer={isMultiplayer} />
+        <RoundSummary state={state} humanId={humanId} onNext={onNextRound} isMultiplayer={isMultiplayer} />
       )}
     </div>
   );

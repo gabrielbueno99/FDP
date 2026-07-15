@@ -1,16 +1,18 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { GameState } from '../lib/types';
+import { avatarColor, initials } from './PlayerArea';
 
 interface RoundSummaryProps {
   state: GameState;
+  humanId: number;
   onNext: () => void;
   isMultiplayer?: boolean;
 }
 
 const AUTO_ADVANCE_SECS = 5;
 
-export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps) {
+export function RoundSummary({ state, humanId, onNext, isMultiplayer }: RoundSummaryProps) {
   const { roundResults, players, round, maxRounds } = state;
   const [countdown, setCountdown] = useState(AUTO_ADVANCE_SECS);
   const onNextRef = useRef(onNext);
@@ -30,51 +32,75 @@ export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-blue-950/95 border-2 border-cyan-700/30 rounded-2xl p-6 max-w-md w-full shadow-2xl">
-        <h2 className="font-display font-black text-cyan-200 text-2xl text-center mb-1">
-          Fim da Rodada {round}
-        </h2>
-        <p className="text-blue-700/60 text-xs text-center mb-5 uppercase tracking-widest">
-          {round} de {maxRounds} rodadas
-        </p>
+  const mine = roundResults.find((r) => r.playerId === humanId);
+  const eliminatedNow = roundResults.filter((r) => r.newlyEliminated);
+  const remaining = players.filter((p) => !p.eliminated).length;
 
-        <div className="space-y-2.5 mb-5">
+  return (
+    <div className="fixed inset-0 bg-[rgba(7,20,16,0.88)] backdrop-blur-[3px] flex items-center justify-center z-50 p-5">
+      <div className="w-full max-w-md flex flex-col">
+        <div className="flex justify-between items-center">
+          <span className="font-display text-cream text-xl">FDP</span>
+          <span className="text-cream/60 text-xs tracking-[1px]">
+            FIM DA RODADA {round} DE {maxRounds}
+          </span>
+        </div>
+
+        {mine && (
+          <div className="text-center mt-8 mb-7 flex flex-col gap-1.5">
+            <span className="font-display text-cream text-4xl leading-tight">
+              {mine.lostPoint ? `Prometeu ${mine.bid}, fez ${mine.tricksWon}.` : 'Você cravou.'}
+            </span>
+            <span className={`font-display italic text-[17px] ${mine.lostPoint ? 'text-danger' : 'text-gold'}`}>
+              {mine.lostPoint
+                ? 'menos uma vida, FDP'
+                : `declarou ${mine.bid}, fez ${mine.tricksWon} — mantém as vidas`}
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2.5">
           {roundResults.map((r) => {
             const player = players.find((p) => p.id === r.playerId);
+            const points = player?.points ?? 0;
             return (
               <div
                 key={r.playerId}
-                className={`flex items-center justify-between rounded-xl px-4 py-3 border ${
+                className={`flex items-center gap-3 rounded-[14px] px-4 py-3.5 border ${
                   r.lostPoint
-                    ? 'bg-red-950/50 border-red-800/40'
-                    : 'bg-green-950/50 border-green-800/40'
+                    ? 'bg-card-red/10 border-card-red/45'
+                    : 'bg-white/[0.04] border-gold/35'
                 }`}
               >
-                <div>
-                  <div className="text-slate-100 font-semibold text-sm">{r.name}</div>
-                  <div className="text-blue-600/70 text-xs">
-                    Declarou {r.bid} · Fez {r.tricksWon}
-                  </div>
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[13px] text-cream shrink-0"
+                  style={{ background: avatarColor(r.playerId) }}
+                >
+                  {initials(r.name)}
+                </div>
+                <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                  <span className="text-cream font-semibold text-sm truncate">{r.name}</span>
+                  <span className="text-cream/60 text-xs">
+                    {r.bid} declarado{r.bid === 1 ? '' : 's'} · {r.tricksWon} feito{r.tricksWon === 1 ? '' : 's'}
+                  </span>
                   {r.newlyEliminated && (
-                    <div className="text-red-400 text-xs font-bold mt-0.5">ELIMINADO!</div>
+                    <span className="text-danger text-[10.5px] font-bold tracking-[1.5px]">ELIMINADO</span>
                   )}
                 </div>
-                <div className="text-right">
-                  {r.lostPoint ? (
-                    <span className="text-red-400 font-bold text-sm">−1 ponto</span>
-                  ) : (
-                    <span className="text-green-400 font-bold text-sm">✓</span>
-                  )}
-                  <div className="flex gap-1 justify-end mt-1.5">
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`text-xs font-semibold ${r.lostPoint ? 'text-danger' : 'text-ok'}`}>
+                    {r.lostPoint ? '−1 vida' : 'cravou'}
+                  </span>
+                  <div className="flex gap-[3px]">
                     {Array.from({ length: 5 }, (_, i) => (
-                      <div
+                      <span
                         key={i}
-                        className={`w-2.5 h-2.5 rounded-full border ${
-                          i < (player?.points ?? 0)
-                            ? 'bg-cyan-400 border-cyan-300'
-                            : 'bg-transparent border-blue-900/40'
+                        className={`w-[7px] h-[7px] rounded-full ${
+                          i < points
+                            ? 'bg-gold'
+                            : r.lostPoint && i === points
+                              ? 'bg-card-red shadow-[0_0_8px_rgba(176,52,52,0.6)]'
+                              : 'bg-white/15'
                         }`}
                       />
                     ))}
@@ -85,20 +111,29 @@ export function RoundSummary({ state, onNext, isMultiplayer }: RoundSummaryProps
           })}
         </div>
 
-        {/* Progress bar */}
-        <div className="h-1 bg-blue-900/40 rounded-full overflow-hidden mb-3">
-          <div
-            className="h-full bg-cyan-500/70 rounded-full transition-all duration-1000 ease-linear"
-            style={{ width: `${(countdown / AUTO_ADVANCE_SECS) * 100}%` }}
-          />
+        <div className="mt-6 flex flex-col gap-3">
+          {eliminatedNow.length > 0 && (
+            <p className="text-center text-cream/50 text-[12.5px]">
+              {eliminatedNow.map((r) => r.name).join(', ')}{' '}
+              {eliminatedNow.length > 1 ? 'foram eliminados' : 'foi eliminado'} — {remaining} segue
+              {remaining > 1 ? 'm' : ''} na mesa
+            </p>
+          )}
+          <div className="h-[3px] rounded-full bg-white/10 overflow-hidden">
+            <div
+              className="h-full bg-gold rounded-full transition-all duration-1000 ease-linear"
+              style={{ width: `${(countdown / AUTO_ADVANCE_SECS) * 100}%` }}
+            />
+          </div>
+          <button
+            onClick={onNext}
+            className="btn-gold h-13 rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95"
+          >
+            {isMultiplayer
+              ? `Pronto · ${countdown}s`
+              : `Próxima rodada · ${Math.min(round + 1, maxRounds)} carta${round + 1 > 1 ? 's' : ''} · ${countdown}s`}
+          </button>
         </div>
-
-        <button
-          onClick={onNext}
-          className="w-full bg-cyan-700 hover:bg-cyan-600 text-cyan-100 font-bold py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg border border-cyan-600/50"
-        >
-          {isMultiplayer ? `Pronto (${countdown}s)` : `Próxima Rodada (${countdown}s)`}
-        </button>
       </div>
     </div>
   );

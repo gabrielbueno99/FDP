@@ -40,89 +40,64 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen wood-bg flex flex-col items-center justify-center p-6 gap-8">
+    <div className="min-h-screen lobby-bg flex flex-col items-center justify-center p-7 gap-0">
       {/* Title */}
-      <div className="text-center space-y-2">
-        <h1 className="font-display font-black text-cyan-400 text-8xl tracking-widest drop-shadow-[0_0_24px_rgba(0,212,255,0.35)]">
-          FDP
-        </h1>
-        <div className="h-px w-48 mx-auto bg-gradient-to-r from-transparent via-cyan-700/50 to-transparent" />
-        <p className="text-blue-700/70 text-xs tracking-[0.25em] uppercase">
-          Filho da Puta — o jogo de cartas
-        </p>
-      </div>
+      <div className="flex gap-3.5 text-gold text-[15px] tracking-[6px]">♣ ♥ ♠ ♦</div>
+      <h1 className="font-display text-cream text-8xl leading-none tracking-wide mt-4">FDP</h1>
+      <p className="font-display italic text-gold text-lg mt-1.5">
+        o clássico jogo de cartas brasileiro
+      </p>
+      <div className="h-px w-16 my-7 bg-gradient-to-r from-transparent via-gold to-transparent" />
 
-      {/* Decorative cards */}
-      <div className="flex gap-2 -rotate-1 my-1">
-        {[
-          { suit: '♣', color: 'text-gray-900', rotate: '-rotate-3' },
-          { suit: '♥', color: 'text-red-600', rotate: 'rotate-2' },
-          { suit: '♠', color: 'text-gray-900', rotate: '-rotate-1' },
-          { suit: '♦', color: 'text-red-600', rotate: 'rotate-3' },
-        ].map((s, i) => (
-          <div
-            key={i}
-            className={`w-14 h-20 bg-white rounded-xl flex items-center justify-center text-3xl shadow-xl border border-blue-300/10 ${s.rotate}`}
-          >
-            <span className={s.color}>{s.suit}</span>
+      <div className="flex flex-col gap-3.5 w-full max-w-sm">
+        {/* Solo panel */}
+        <div className="bg-white/[0.04] border border-gold/35 rounded-2xl px-5 py-[18px] flex flex-col gap-3">
+          <div className="flex justify-between items-baseline">
+            <span className="text-cream font-semibold">Jogar solo</span>
+            <span className="text-cream/55 text-[12.5px]">
+              você vs {playerCount - 1} bot{playerCount > 2 ? 's' : ''}
+            </span>
           </div>
-        ))}
-      </div>
 
-      {/* Solo panel */}
-      <div className="bg-black/35 border border-blue-900/35 rounded-2xl p-6 w-full max-w-xs flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
-        <h2 className="text-cyan-200 font-bold text-lg text-center tracking-wide">Jogar Solo</h2>
-
-        <div className="flex flex-col gap-2">
-          <label className="text-blue-700/70 text-xs uppercase tracking-widest text-center">
-            Número de jogadores
-          </label>
-          <div className="flex gap-1.5 justify-center flex-wrap">
+          <div className="flex gap-2 justify-center flex-wrap">
             {[2, 3, 4, 5, 6, 7, 8].map((n) => (
               <button
                 key={n}
                 onClick={() => setPlayerCount(n)}
                 className={[
-                  'w-10 h-10 rounded-xl font-bold text-sm transition-all border',
+                  'w-11 h-11 rounded-[10px] text-[15px] transition-all',
                   playerCount === n
-                    ? 'bg-cyan-700 text-white border-cyan-600 scale-110 shadow-[0_0_12px_rgba(0,212,255,0.3)]'
-                    : 'bg-blue-950/50 text-blue-500 border-blue-800/30 hover:border-cyan-700/50 hover:text-cyan-300',
+                    ? 'bg-gold text-ink font-bold'
+                    : 'border border-gold/30 text-cream/60 hover:border-gold/60 hover:text-cream',
                 ].join(' ')}
               >
                 {n}
               </button>
             ))}
           </div>
-          <p className="text-blue-800/60 text-xs text-center">
-            Você vs {playerCount - 1} bot{playerCount > 2 ? 's' : ''}
-          </p>
+
+          <button
+            onClick={handleStartSolo}
+            className="btn-gold h-13 rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95"
+          >
+            Iniciar partida
+          </button>
         </div>
 
-        <button
-          onClick={handleStartSolo}
-          className="bg-cyan-700 hover:bg-cyan-600 text-cyan-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg border border-cyan-600/40"
-        >
-          Iniciar Partida
-        </button>
-      </div>
-
-      {/* Online panel */}
-      <div className="bg-black/35 border border-blue-900/35 rounded-2xl p-6 w-full max-w-xs flex flex-col gap-4 backdrop-blur-sm shadow-2xl">
-        <h2 className="text-cyan-200 font-bold text-lg text-center tracking-wide">Jogar Online</h2>
-        <p className="text-blue-700/60 text-sm text-center">
-          Crie uma sala e compartilhe o link com seus amigos
-        </p>
+        {/* Online */}
         <button
           onClick={() => router.push('/criar')}
-          className="bg-green-800 hover:bg-green-700 text-green-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg border border-green-700/40"
+          className="h-13 rounded-xl border border-gold/45 text-cream font-semibold text-[15px] transition-all hover:bg-white/[0.04] active:scale-95"
         >
-          Criar Sala
+          Criar sala online
         </button>
-      </div>
 
-      <p className="text-blue-900/45 text-xs text-center max-w-xs">
-        Declare quantos tentos vai fazer. Quem errar perde 1 ponto. Começa com 5. Último sobrevivente vence.
-      </p>
+        <p className="text-center text-cream/45 text-xs leading-normal mt-2">
+          Declare seus tentos. Erre e perca uma vida.
+          <br />
+          Cinco vidas. Último de pé leva.
+        </p>
+      </div>
     </div>
   );
 }

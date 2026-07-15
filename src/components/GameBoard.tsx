@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { GameState } from '../lib/types';
-import { PlayerArea } from './PlayerArea';
+import { SUIT_SYMBOLS, getCardStrength } from '../lib/deck';
+import { Dots, PlayerArea } from './PlayerArea';
 import { TrickArea } from './TrickArea';
 import { BidPanel } from './BidPanel';
 import { RoundSummary } from './RoundSummary';
@@ -18,44 +19,21 @@ interface GameBoardProps {
   isMultiplayer?: boolean;
 }
 
-// Portrait: % of the table-zone container.
-// Container: 94%vw wide, paddingTop=70px, then oval paddingBottom=40% (2.5:1 ratio).
-// Container height ≈ 70 + 40%×94%vw. Oval center-y ≈ 66%.
-// Index = player.id. Null = human (rendered in bottom panel instead).
-function getPortraitSeats(n: number): Array<{ x: string; y: string } | null> {
-  const cfg: Record<number, Array<[number, number] | null>> = {
-    2: [null, [50, 14]],
-    3: [null, [75, 14], [25, 14]],
-    4: [null, [88, 66], [50, 14], [12, 66]],
-    5: [null, [88, 80], [71, 14], [29, 14], [12, 80]],
-    6: [null, [88, 80], [78, 14], [50, 14], [22, 14], [12, 80]],
-    7: [null, [88, 85], [88, 48], [65, 14], [35, 14], [12, 48], [12, 85]],
-  };
-  return (cfg[Math.min(n, 7)] ?? cfg[4]).map(
-    (item) => (item ? { x: `${item[0]}%`, y: `${item[1]}%` } : null)
-  );
-}
-
-// Landscape: % of the left-zone container (56%vw wide, h-dvh minus header tall).
-// Index = player.id. Null = human (rendered in right panel instead).
+// Landscape seats: % of the table zone (full width under the header).
+// Index = RELATIVE position (0 = human, rendered in the bottom bar instead).
 function getLandscapeSeats(n: number): Array<{ x: string; y: string } | null> {
   const cfg: Record<number, Array<[number, number] | null>> = {
-    2: [null, [50, 10]],
-    3: [null, [76, 10], [24, 10]],
-    4: [null, [88, 50], [50, 10], [12, 50]],
-    5: [null, [88, 65], [72, 10], [28, 10], [12, 65]],
-    6: [null, [88, 65], [80, 10], [50, 7], [20, 10], [12, 65]],
-    7: [null, [88, 75], [88, 32], [67, 7], [33, 7], [12, 32], [12, 75]],
+    2: [null, [50, 16]],
+    3: [null, [78, 18], [22, 18]],
+    4: [null, [86, 42], [50, 12], [14, 42]],
+    5: [null, [86, 52], [73, 12], [27, 12], [14, 52]],
+    6: [null, [86, 52], [79, 12], [50, 10], [21, 12], [14, 52]],
+    7: [null, [87, 58], [87, 26], [66, 10], [34, 10], [13, 26], [13, 58]],
   };
   return (cfg[Math.min(n, 7)] ?? cfg[4]).map(
     (item) => (item ? { x: `${item[0]}%`, y: `${item[1]}%` } : null)
   );
 }
-
-const RAIL_STYLE = {
-  background: 'linear-gradient(145deg,#0d1929 0%,#081320 50%,#0d1929 100%)',
-  boxShadow: '0 8px 40px rgba(0,0,0,0.85),inset 0 1px 3px rgba(0,212,255,0.08),0 0 0 1px rgba(0,212,255,0.12)',
-};
 
 export function GameBoard({
   state,
@@ -69,9 +47,9 @@ export function GameBoard({
   isMultiplayer,
 }: GameBoardProps) {
   const {
-    phase, players, round, maxRounds,
+    phase, players, round,
     dealerPlayerId, currentBidderId, currentPlayerId,
-    trickWinnerId, manilhaValue, winner, trickLeaderId,
+    trickWinnerId, manilhaValue, winner, trickLeaderId, vira,
   } = state;
 
   const [isLandscape, setIsLandscape] = useState(false);
@@ -82,8 +60,34 @@ export function GameBoard({
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // Card ids are stable across rounds, so a stale selection would carry over —
+  // reset it whenever the round or phase changes (adjust-state-during-render).
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [prevSelectionKey, setPrevSelectionKey] = useState('');
+  const selectionKey = `${round}-${phase}`;
+  if (selectionKey !== prevSelectionKey) {
+    setPrevSelectionKey(selectionKey);
+    setSelectedCardId(null);
+  }
+
   const humanPlayer = players.find((p) => p.id === humanId);
   const canPlayCard = phase === 'playing' && isMyTurn;
+
+  const handleCardClick = (cardId: string) => {
+    if (cardId === selectedCardId) {
+      setSelectedCardId(null);
+      onCardPlay(cardId);
+    } else {
+      setSelectedCardId(cardId);
+    }
+  };
+
+  const playSelected = () => {
+    if (!selectedCardId) return;
+    const id = selectedCardId;
+    setSelectedCardId(null);
+    onCardPlay(id);
+  };
 
   const activePlayers = players.filter((p) => !p.eliminated);
   const humanIdx = activePlayers.findIndex((p) => p.id === humanId);
@@ -102,208 +106,298 @@ export function GameBoard({
   const biddedPlayers = activePlayers.filter((p) => p.bid !== null);
   const totalBidsSoFar = biddedPlayers.reduce((sum, p) => sum + p.bid!, 0);
   const tentoDiff = totalBidsSoFar - round;
-  const showTento = biddedPlayers.length > 0;
+  const showTento = biddedPlayers.length > 0 && phase === 'bidding';
+
+  const completedTricks = activePlayers.reduce((sum, p) => sum + p.tricksWon, 0);
+  const vazaNum = Math.min(completedTricks + 1, round);
+
+  // Selected card label for the play button / hint ("A♥"; hidden in round 1)
+  const selectedCard = humanPlayer?.hand.find((c) => c.id === selectedCardId);
+  const humanSeesCards = round > 1;
+  const selectedLabel =
+    selectedCard && humanSeesCards ? `${selectedCard.value}${SUIT_SYMBOLS[selectedCard.suit]}` : 'a carta';
+  const selectedIsManilha = humanSeesCards && selectedCard?.value === manilhaValue;
+
+  // Center status ("sua vez — Bia leva por enquanto")
+  const leading = state.currentTrick.length > 0 && manilhaValue
+    ? state.currentTrick.reduce((leader, played) =>
+        getCardStrength(played.card, manilhaValue) > getCardStrength(leader.card, manilhaValue)
+          ? played : leader
+      )
+    : null;
+  const leadingName = leading ? players.find((p) => p.id === leading.playerId)?.name : null;
+  const status =
+    phase === 'playing'
+      ? isMyTurn
+        ? leadingName
+          ? `sua vez — ${leadingName} leva por enquanto`
+          : 'sua vez, se garante?'
+        : `vez de ${players.find((p) => p.id === currentPlayerId)?.name}`
+      : phase === 'bidding' && !isMyTurn
+        ? 'aguardando declarações…'
+        : null;
 
   if (phase === 'game-end') {
+    const others = players
+      .filter((p) => p.id !== winner?.id)
+      .sort((a, b) => b.points - a.points);
+    const humanWon = winner?.id === humanId;
     return (
-      <div className="min-h-screen wood-bg flex items-center justify-center p-4">
-        <div className="bg-blue-950/90 border-2 border-cyan-700/40 rounded-2xl p-8 max-w-sm w-full text-center shadow-2xl backdrop-blur-sm">
-          <div className="text-6xl mb-4">🏆</div>
-          <h2 className="font-display font-black text-cyan-200 text-3xl mb-2">
-            {winner?.id === humanId ? 'Você venceu!' : `${winner?.name} venceu!`}
-          </h2>
-          <p className="text-blue-700/60 text-sm mb-6 uppercase tracking-widest">
-            Rodada {round} de {maxRounds}
-          </p>
+      <div className="min-h-screen lobby-bg flex flex-col items-center justify-center p-7">
+        <div className="w-full max-w-sm flex flex-col items-center">
+          <div className="flex gap-3.5 text-gold text-[15px] tracking-[6px]">♣ ♥ ♠ ♦</div>
+          <div className="text-center mt-6 flex flex-col gap-2">
+            <span className="font-display italic text-gold text-lg">último de pé</span>
+            <span className="font-display text-cream text-5xl leading-none">
+              {humanWon ? 'Você venceu.' : `${winner?.name} venceu.`}
+            </span>
+            <span className="text-cream/60 text-sm">
+              {round} rodada{round > 1 ? 's' : ''} · {winner?.points} vida{(winner?.points ?? 0) > 1 ? 's' : ''} de sobra
+            </span>
+          </div>
+
+          <div className="w-full mt-9 flex flex-col gap-2">
+            <div className="flex justify-between items-center px-3.5 py-2.5 rounded-xl bg-white/[0.04] border border-gold/35">
+              <span className="text-cream text-[13.5px] font-semibold">1 · {winner?.name}</span>
+              <span className="text-gold text-[12.5px]">{winner?.points} vida{(winner?.points ?? 0) > 1 ? 's' : ''}</span>
+            </div>
+            {others.map((p, i) => (
+              <div key={p.id} className="flex justify-between items-center px-3.5 py-2.5 rounded-xl bg-white/[0.03]">
+                <span className="text-cream/70 text-[13.5px]">{i + 2} · {p.name}</span>
+                <span className="text-cream/45 text-[12.5px]">eliminado</span>
+              </div>
+            ))}
+          </div>
+
           <button
             onClick={onRestart}
-            className="w-full bg-cyan-700 hover:bg-cyan-600 text-cyan-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-lg border border-cyan-600/50"
+            className="btn-gold w-full h-13 rounded-xl font-bold text-base mt-9 transition-all hover:brightness-110 active:scale-95"
           >
-            Jogar Novamente
+            Jogar de novo
           </button>
         </div>
       </div>
     );
   }
 
-  // ── Shared sub-elements ──────────────────────────────────
+  const roundLabel =
+    phase === 'bidding'
+      ? `RODADA ${round} · ${round} CARTA${round > 1 ? 'S' : ''}`
+      : `RODADA ${round} · VAZA ${vazaNum} DE ${round}`;
 
-  const headerJsx = (
-    <div className="shrink-0 z-20 flex items-center justify-between px-3 py-2 bg-gradient-to-b from-black/65 to-transparent pointer-events-none">
-      <span className="font-display font-black text-cyan-400 text-xl tracking-widest drop-shadow-[0_0_10px_rgba(0,212,255,0.35)]">
-        FDP
-      </span>
-      <div className="flex items-center gap-1.5">
-        <div className="flex items-center gap-1 bg-black/40 rounded-full px-2.5 py-1 border border-blue-900/40">
-          <span className="text-blue-600/70 text-[10px]">Rodada</span>
-          <span className="text-cyan-200 font-black text-xs">{round}</span>
-          <span className="text-blue-700/60 text-[10px]">/{maxRounds}</span>
-        </div>
-        {showTento && (
-          <div className={`rounded-full px-2.5 py-1 border text-[10px] font-bold ${
-            tentoDiff > 0
-              ? 'bg-red-950/70 border-red-700/50 text-red-400'
-              : tentoDiff < 0
-                ? 'bg-yellow-950/70 border-yellow-700/50 text-yellow-400'
-                : 'bg-green-950/70 border-green-700/50 text-green-400'
-          }`}>
-            {tentoDiff > 0 ? `Sobra ${tentoDiff}` : tentoDiff < 0 ? `Falta ${Math.abs(tentoDiff)}` : 'Fechado!'}
-          </div>
-        )}
-      </div>
-      <span className="text-blue-700/60 text-[10px]">
-        {phase === 'bidding' ? '📋 Decl.' : (phase === 'playing' || phase === 'trick-end') ? '🃏 Jogo' : ''}
-      </span>
-    </div>
+  const tentoPill = showTento && (
+    <span className={`rounded-full px-2.5 py-1 border text-[10px] font-semibold ${
+      tentoDiff === 0 ? 'border-gold/40 text-gold' : 'border-white/15 text-cream/60'
+    }`}>
+      {tentoDiff > 0 ? `sobra ${tentoDiff}` : tentoDiff < 0 ? `falta ${Math.abs(tentoDiff)}` : 'conta fechada'}
+    </span>
   );
 
-  const portraitSeats = getPortraitSeats(players.length);
-  const landscapeSeats = getLandscapeSeats(players.length);
-
-  // Seat positions are indexed by RELATIVE position (0 = human, 1 = next clockwise…).
-  // We must NOT use player.id as the seat index — in multiplayer the human is not
-  // always ID 0, so that would hide the host (ID 0) from every guest's table.
-  const renderOpponents = (seats: ReturnType<typeof getPortraitSeats>) =>
-    players
-      .filter((p) => p.id !== humanId)
-      .map((player) => {
-        const pIdx   = activePlayers.findIndex((p) => p.id === player.id);
-        const relIdx = (pIdx - humanIdx + activePlayers.length) % activePlayers.length;
-        const seat   = seats[relIdx];
-        if (!seat) return null;
-        return (
-          <div
-            key={player.id}
-            className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
-            style={{ left: seat.x, top: seat.y }}
-          >
-            <PlayerArea
-              player={player}
-              isDealer={player.id === dealerPlayerId}
-              isCurrentBidder={phase === 'bidding' && player.id === currentBidderId}
-              isCurrentPlayer={phase === 'playing' && player.id === currentPlayerId}
-              isTrickWinner={phase === 'trick-end' && player.id === trickWinnerId}
-              manilhaValue={manilhaValue}
-              showCards={round === 1}
-              bigCards={round === 1}
-              compact
-              small
-              seat
-              playOrder={trickPlayOrder[player.id]}
-              hasPlayedInTrick={playedInTrick.has(player.id)}
-            />
-          </div>
-        );
-      });
-
-  const humanPanelContent = humanPlayer && (
-    <>
-      <PlayerArea
-        player={humanPlayer}
-        isDealer={humanPlayer.id === dealerPlayerId}
-        isCurrentBidder={phase === 'bidding' && humanPlayer.id === currentBidderId}
-        isCurrentPlayer={phase === 'playing' && humanPlayer.id === currentPlayerId}
-        isTrickWinner={phase === 'trick-end' && humanPlayer.id === trickWinnerId}
-        manilhaValue={manilhaValue}
-        showCards={round > 1}
-        onCardClick={canPlayCard ? onCardPlay : undefined}
-        playOrder={trickPlayOrder[humanPlayer.id]}
-        hasPlayedInTrick={playedInTrick.has(humanPlayer.id)}
-      />
-      {phase === 'bidding' && isMyTurn && (
-        <BidPanel
-          cardsInRound={round}
-          forbiddenBid={forbiddenBid}
-          onBid={onBid}
-          tentoDiff={tentoDiff}
-          bidsPlaced={biddedPlayers.length}
-        />
-      )}
-      {phase === 'bidding' && !isMyTurn && (
-        <p className="text-blue-600/70 text-sm animate-pulse">Aguardando declarações...</p>
-      )}
-      {phase === 'playing' && isMyTurn && (
-        <p className="text-cyan-300 text-sm font-bold animate-pulse tracking-widest uppercase">
-          ✦ Sua vez ✦
-        </p>
-      )}
-      {phase === 'playing' && !isMyTurn && (
-        <p className="text-blue-600/70 text-sm animate-pulse">Aguardando jogada...</p>
-      )}
-    </>
+  const renderOpponent = (player: (typeof players)[number]) => (
+    <PlayerArea
+      player={player}
+      isDealer={player.id === dealerPlayerId}
+      isCurrentBidder={phase === 'bidding' && player.id === currentBidderId}
+      isCurrentPlayer={phase === 'playing' && player.id === currentPlayerId}
+      isTrickWinner={phase === 'trick-end' && player.id === trickWinnerId}
+      manilhaValue={manilhaValue}
+      showCards={round === 1}
+      bigCards={round === 1}
+      compact
+      playOrder={trickPlayOrder[player.id]}
+      hasPlayedInTrick={playedInTrick.has(player.id)}
+    />
   );
 
-  // ── Landscape ─────────────────────────────────────────────
+  // ── Landscape — mesa oval cinematográfica (5a/6b) ─────────
   if (isLandscape) {
+    const seats = getLandscapeSeats(players.length);
     return (
-      <div className="h-dvh wood-bg flex flex-col select-none overflow-hidden">
-        {headerJsx}
-        <div className="flex-1 flex flex-row min-h-0">
+      <div className="h-dvh room-bg flex flex-col select-none overflow-hidden">
+        {/* Top bar */}
+        <div className="shrink-0 z-20 flex items-center justify-between px-10 py-5">
+          <span className="font-display text-cream text-[28px] leading-none">FDP</span>
+          <div className="flex items-center gap-5">
+            <span className="text-cream/60 text-[13px] tracking-[2px]">{roundLabel}</span>
+            {tentoPill}
+            {vira && (
+              <div className="flex items-center gap-2 px-3.5 py-2 border border-gold/30 rounded-full">
+                <span className="text-cream/50 text-[11px] tracking-[2px]">VIRA</span>
+                <span className={`font-display text-lg leading-none ${
+                  vira.suit === 'hearts' || vira.suit === 'diamonds' ? 'text-danger' : 'text-cream'
+                }`}>
+                  {vira.value}{SUIT_SYMBOLS[vira.suit]}
+                </span>
+                <span className="text-gold text-[13px] font-semibold">manilha {manilhaValue}</span>
+              </div>
+            )}
+          </div>
+        </div>
 
-          {/* Left: oval table + opponents */}
-          <div className="relative" style={{ width: '56%' }}>
-            {/* Oval via absolute fill */}
-            <div className="absolute z-0" style={{ top: '6%', bottom: '6%', left: '5%', right: '5%' }}>
-              <div
-                className="absolute inset-0 rounded-[50%]"
-                style={RAIL_STYLE}
-              >
-                <div className="absolute inset-[10px] rounded-[50%] felt-center flex items-center justify-center overflow-hidden">
-                  <TrickArea state={state} />
-                </div>
+        {/* Table zone */}
+        <div className="flex-1 relative min-h-0">
+          {/* Oval felt */}
+          <div className="absolute rounded-[50%] table-rail" style={{ left: '20%', right: '20%', top: '4%', bottom: '26%' }}>
+            <div className="absolute inset-[10px] rounded-[50%] felt-center overflow-hidden">
+              <div className="absolute inset-[8%] rounded-[50%] border border-gold/20 pointer-events-none" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <TrickArea state={state} showVira={false} status={status} />
               </div>
             </div>
-            {renderOpponents(landscapeSeats)}
           </div>
 
-          {/* Right: human panel */}
-          <div
-            className="flex flex-col items-center justify-center gap-2 px-3 pb-2 overflow-y-auto"
-            style={{ width: '44%' }}
-          >
-            {humanPanelContent}
+          {/* Opponents around the table */}
+          {players
+            .filter((p) => p.id !== humanId)
+            .map((player) => {
+              const pIdx   = activePlayers.findIndex((p) => p.id === player.id);
+              const relIdx = (pIdx - humanIdx + activePlayers.length) % activePlayers.length;
+              const seat   = seats[relIdx];
+              if (!seat) return null;
+              return (
+                <div
+                  key={player.id}
+                  className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
+                  style={{ left: seat.x, top: seat.y }}
+                >
+                  {renderOpponent(player)}
+                </div>
+              );
+            })}
+
+          {/* Bottom bar: you · hand · action */}
+          <div className="absolute inset-x-0 bottom-0 z-30 flex justify-center items-end gap-8 px-10 pb-5">
+            {humanPlayer && (
+              <>
+                <div className="flex flex-col gap-2 items-start mb-3.5 w-44">
+                  <span className="text-cream font-semibold">
+                    {humanPlayer.name}
+                    {humanPlayer.id === dealerPlayerId && (
+                      <span className="text-gold font-bold tracking-[1.5px] text-[10px]"> · CARTEIA</span>
+                    )}
+                  </span>
+                  {humanPlayer.bid !== null && (
+                    <span className="text-cream/60 text-[13px]">
+                      tentos {humanPlayer.bid} · fez {humanPlayer.tricksWon}
+                    </span>
+                  )}
+                  <Dots points={humanPlayer.points} />
+                </div>
+
+                <PlayerArea
+                  player={humanPlayer}
+                  isDealer={false}
+                  isCurrentBidder={false}
+                  isCurrentPlayer={false}
+                  isTrickWinner={false}
+                  manilhaValue={manilhaValue}
+                  showCards={humanSeesCards}
+                  onCardClick={canPlayCard ? handleCardClick : undefined}
+                  selectedCardId={selectedCardId}
+                  handOnly
+                  xlCards
+                />
+
+                <div className="flex flex-col gap-2.5 items-center mb-3.5 w-64">
+                  {phase === 'bidding' && isMyTurn ? (
+                    <BidPanel
+                      cardsInRound={round}
+                      forbiddenBid={forbiddenBid}
+                      onBid={onBid}
+                      tentoDiff={tentoDiff}
+                      bidsPlaced={biddedPlayers.length}
+                    />
+                  ) : canPlayCard && selectedCardId ? (
+                    <>
+                      <button
+                        onClick={playSelected}
+                        className="btn-gold h-13 px-8 rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95"
+                      >
+                        Jogar {selectedLabel}
+                      </button>
+                      <span className="text-cream/45 text-xs text-center">
+                        {selectedIsManilha ? 'manilha na mão' : 'ou clique em outra carta'}
+                      </span>
+                    </>
+                  ) : canPlayCard ? (
+                    <span className="text-cream/45 text-xs text-center">clique numa carta pra escolher</span>
+                  ) : null}
+                </div>
+              </>
+            )}
           </div>
         </div>
+
         {phase === 'round-end' && (
-          <RoundSummary state={state} onNext={onNextRound} isMultiplayer={isMultiplayer} />
+          <RoundSummary state={state} humanId={humanId} onNext={onNextRound} isMultiplayer={isMultiplayer} />
         )}
       </div>
     );
   }
 
-  // ── Portrait (default) ────────────────────────────────────
+  // ── Portrait — pods no topo, centro livre, leque embaixo (1a/4a/6a) ──
   return (
-    <div className="h-dvh wood-bg flex flex-col select-none overflow-hidden">
-      {headerJsx}
-
-      {/* justify-center vertically balances table + hand on all screen heights */}
-      <div className="flex-1 flex flex-col min-h-0 justify-center gap-4 py-2">
-        {/* Table zone: paddingTop reserves space for top-edge players */}
-        <div className="relative shrink-0 mx-[3%]" style={{ paddingTop: '70px' }}>
-
-          {/* Oval via paddingBottom aspect-ratio trick (2.5:1) */}
-          <div className="relative w-full" style={{ paddingBottom: '40%' }}>
-            <div
-              className="absolute inset-0 rounded-[50%]"
-              style={RAIL_STYLE}
-            >
-              <div className="absolute inset-[10px] rounded-[50%] felt-center flex items-center justify-center overflow-hidden">
-                <TrickArea state={state} />
-              </div>
-            </div>
-          </div>
-
-          {renderOpponents(portraitSeats)}
-        </div>
-
-        {/* Human panel */}
-        <div className="shrink-0 px-4 pb-1 max-w-lg mx-auto w-full flex flex-col items-center gap-2">
-          {humanPanelContent}
+    <div className="h-dvh table-bg flex flex-col select-none overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 flex items-center justify-between px-4 pt-5 pb-1">
+        <span className="font-display text-cream text-xl leading-none">FDP</span>
+        <div className="flex items-center gap-2">
+          <span className="text-cream/60 text-xs tracking-[1px]">{roundLabel}</span>
+          {tentoPill}
         </div>
       </div>
 
+      {/* Opponent pods */}
+      <div className="shrink-0 flex flex-wrap justify-center gap-2 px-3.5 mt-3">
+        {players
+          .filter((p) => p.id !== humanId)
+          .map((player) => (
+            <div key={player.id} className="flex-1 min-w-[104px] max-w-[132px]">
+              {renderOpponent(player)}
+            </div>
+          ))}
+      </div>
+
+      {/* Center: vira + trick + status (+ bid) */}
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 px-4 overflow-y-auto">
+        <TrickArea state={state} status={status} />
+        {phase === 'bidding' && isMyTurn && (
+          <BidPanel
+            cardsInRound={round}
+            forbiddenBid={forbiddenBid}
+            onBid={onBid}
+            tentoDiff={tentoDiff}
+            bidsPlaced={biddedPlayers.length}
+          />
+        )}
+      </div>
+
+      {/* Your hand */}
+      <div className="shrink-0 px-4 pb-4 pt-1 max-w-lg mx-auto w-full flex flex-col gap-2.5">
+        {humanPlayer && (
+          <PlayerArea
+            player={humanPlayer}
+            isDealer={humanPlayer.id === dealerPlayerId}
+            isCurrentBidder={phase === 'bidding' && humanPlayer.id === currentBidderId}
+            isCurrentPlayer={phase === 'playing' && humanPlayer.id === currentPlayerId}
+            isTrickWinner={phase === 'trick-end' && humanPlayer.id === trickWinnerId}
+            manilhaValue={manilhaValue}
+            showCards={humanSeesCards}
+            onCardClick={canPlayCard ? handleCardClick : undefined}
+            selectedCardId={selectedCardId}
+          />
+        )}
+        {canPlayCard && (
+          <p className="text-center text-cream/45 text-xs">
+            {selectedCardId
+              ? `toque de novo pra jogar ${selectedLabel}`
+              : 'toque numa carta pra escolher'}
+          </p>
+        )}
+      </div>
+
       {phase === 'round-end' && (
-        <RoundSummary state={state} onNext={onNextRound} isMultiplayer={isMultiplayer} />
+        <RoundSummary state={state} humanId={humanId} onNext={onNextRound} isMultiplayer={isMultiplayer} />
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 import { Player, Value } from '../lib/types';
-import { CardBack, CardComponent } from './CardComponent';
+import { CardBack, CardComponent, CardSize } from './CardComponent';
 import { getCardStrength } from '../lib/deck';
 
 interface PlayerAreaProps {
@@ -13,29 +13,56 @@ interface PlayerAreaProps {
   showCards: boolean;
   onCardClick?: (cardId: string) => void;
   compact?: boolean;
-  small?: boolean;
   bigCards?: boolean;
-  seat?: boolean;
   playOrder?: number;
   hasPlayedInTrick?: boolean;
+  /** Card raised + gold outline; second tap plays it. */
+  selectedCardId?: string | null;
+  /** Render only the fan (info shown elsewhere, e.g. desktop bottom bar). */
+  handOnly?: boolean;
+  /** Desktop-size cards in the fan. */
+  xlCards?: boolean;
 }
 
+const AVATAR_COLORS = ['#3a5a4a', '#5a3a3a', '#3a4a5a', '#4a5a3a', '#5a4a3a', '#4a3a5a', '#5a5a3a', '#3a5a5a'];
 
-function Dots({ points, small }: { points: number; small?: boolean }) {
+export function avatarColor(playerId: number) {
+  return AVATAR_COLORS[playerId % AVATAR_COLORS.length];
+}
+
+export function initials(name: string) {
+  return name.slice(0, 2).toUpperCase();
+}
+
+export function Dots({ points, small }: { points: number; small?: boolean }) {
   return (
-    <div className="flex gap-0.5">
+    <div className={small ? 'flex gap-[3px]' : 'flex gap-1'}>
       {Array.from({ length: 5 }, (_, i) => (
         <div
           key={i}
-          className={`rounded-full border transition-all ${small ? 'w-2 h-2' : 'w-3 h-3'} ${
-            i < points
-              ? 'bg-cyan-400 border-cyan-300 shadow-[0_0_4px_rgba(0,212,255,0.5)]'
-              : 'bg-transparent border-blue-900/40'
+          className={`rounded-full transition-all ${small ? 'w-1.5 h-1.5' : 'w-2 h-2'} ${
+            i < points ? 'bg-gold' : 'bg-white/15'
           }`}
         />
       ))}
     </div>
   );
+}
+
+function fanTransform(index: number, count: number, selected: boolean) {
+  if (selected) return 'translateY(-16px)';
+  if (count === 1) return undefined;
+  const mid = (index - (count - 1) / 2);
+  const step = count > 6 ? 2.4 : 5;
+  return `rotate(${mid * step}deg) translateY(${Math.abs(mid) * (count > 6 ? 3 : 5)}px)`;
+}
+
+function handOverlap(count: number, xl: boolean) {
+  if (xl) return count > 6 ? '-space-x-[52px]' : count > 2 ? '-space-x-9' : '-space-x-2';
+  if (count > 8) return '-space-x-14';
+  if (count > 5) return '-space-x-12';
+  if (count > 2) return '-space-x-7';
+  return '-space-x-1';
 }
 
 export function PlayerArea({
@@ -48,11 +75,12 @@ export function PlayerArea({
   showCards,
   onCardClick,
   compact,
-  small,
   bigCards,
-  seat,
   playOrder,
   hasPlayedInTrick,
+  selectedCardId,
+  handOnly,
+  xlCards,
 }: PlayerAreaProps) {
   const sortedHand = manilhaValue
     ? [...player.hand].sort((a, b) => getCardStrength(b, manilhaValue) - getCardStrength(a, manilhaValue))
@@ -60,181 +88,117 @@ export function PlayerArea({
 
   const highlight =
     isCurrentPlayer || isCurrentBidder
-      ? 'ring-2 ring-cyan-400/70 ring-offset-1 ring-offset-transparent'
+      ? 'outline outline-[1.5px] outline-gold'
       : isTrickWinner
-      ? 'ring-2 ring-green-400/70 ring-offset-1 ring-offset-transparent'
-      : '';
+        ? 'outline outline-[1.5px] outline-ok'
+        : '';
 
   const elim = player.eliminated ? 'opacity-25' : '';
 
+  // Opponent pod — avatar, name, tentos, vidas, cartas
   if (compact) {
     return (
-      <div className={`${highlight} ${elim}`}>
-        {/* Mobile: horizontal pill with xs cards — hidden in seat mode */}
-        <div className={`${seat ? 'hidden' : 'sm:hidden'} flex items-center gap-2.5 rounded-xl px-3 py-2 bg-black/30 border border-blue-900/30`}>
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <div className="flex items-center gap-1">
-              <span className="text-slate-100 font-semibold text-xs truncate max-w-[72px]">
-                {player.name}
-              </span>
-              {isDealer && (
-                <span className="bg-cyan-800 text-cyan-100 text-[8px] font-black px-1 py-px rounded-full leading-none">
-                  D
-                </span>
-              )}
-              {playOrder !== undefined && (
-                <span className={`text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border leading-none ${
-                  hasPlayedInTrick
-                    ? 'bg-green-900/60 text-green-400 border-green-700/40'
-                    : 'bg-blue-900/70 text-cyan-300 border-blue-700/50'
-                }`}>
-                  {playOrder}
-                </span>
-              )}
-            </div>
-            <Dots points={player.points} small />
-            {player.bid !== null && (
-              <div className="flex items-center gap-0.5 bg-black/40 border border-blue-800/30 rounded-full px-2 py-0.5 self-start">
-                <span className="text-cyan-300 font-black text-xs">{player.bid}</span>
-                <span className="text-blue-700/50 text-[10px]">/</span>
-                <span className="text-green-400 font-black text-xs">{player.tricksWon}</span>
-              </div>
-            )}
-            {isCurrentBidder && player.bid === null && (
-              <span className="text-cyan-400 text-[10px] animate-pulse">Decl...</span>
-            )}
-          </div>
-          {!player.eliminated && (
-            <div className="flex gap-0.5 flex-shrink-0">
-              {showCards
-                ? sortedHand.map((card) => (
-                    <CardComponent
-                      key={card.id}
-                      card={card}
-                      isManilha={card.value === manilhaValue}
-                      size="xs"
-                    />
-                  ))
-                : sortedHand.map((_, i) => <CardBack key={i} size="xs" />)}
-            </div>
+      <div
+        className={`flex flex-col items-center gap-1 rounded-[14px] px-2 py-2 bg-black/30 ${highlight} ${elim}`}
+      >
+        <div
+          className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-[13px] text-cream"
+          style={{ background: avatarColor(player.id) }}
+        >
+          {initials(player.name)}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-cream font-semibold text-xs truncate max-w-[80px]">{player.name}</span>
+          {player.eliminated && <span className="text-danger text-xs font-bold">✕</span>}
+          {playOrder !== undefined && (
+            <span
+              className={`text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center leading-none ${
+                hasPlayedInTrick ? 'bg-ok/25 text-ok' : 'bg-gold/25 text-gold'
+              }`}
+            >
+              {playOrder}
+            </span>
           )}
         </div>
-
-        {/* Desktop: column layout — always shown in seat mode */}
-        <div className={`${seat ? 'flex' : 'hidden sm:flex'} flex-col items-center gap-2 rounded-xl px-3 py-2 bg-black/30 border border-blue-900/30`}>
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-100 font-semibold text-sm">{player.name}</span>
-            {isDealer && (
-              <span className="bg-cyan-800 text-cyan-100 text-[9px] font-black px-1.5 py-0.5 rounded-full">
-                D
-              </span>
-            )}
-            {player.eliminated && <span className="text-red-400 text-xs font-bold">✕</span>}
-            {playOrder !== undefined && (
-              <span className={`text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border leading-none ${
-                hasPlayedInTrick
-                  ? 'bg-green-900/60 text-green-400 border-green-700/40'
-                  : 'bg-blue-900/70 text-cyan-300 border-blue-700/50'
-              }`}>
-                {playOrder}
-              </span>
-            )}
+        {isDealer && (
+          <span className="text-gold text-[9px] font-bold tracking-[1.5px]">CARTEIA</span>
+        )}
+        {player.bid !== null ? (
+          <span className="text-cream/65 text-[10.5px]">
+            tentos {player.bid} · fez {player.tricksWon}
+          </span>
+        ) : isCurrentBidder ? (
+          <span className="font-display italic text-gold text-[11px] animate-pulse">declarando…</span>
+        ) : null}
+        <Dots points={player.points} small />
+        {!player.eliminated && player.hand.length > 0 && (
+          <div className="flex -space-x-3.5">
+            {showCards
+              ? sortedHand.map((card) => (
+                  <CardComponent
+                    key={card.id}
+                    card={card}
+                    isManilha={card.value === manilhaValue}
+                    size={bigCards ? 'md' : 'xs'}
+                  />
+                ))
+              : sortedHand.map((_, i) => <CardBack key={i} size={bigCards ? 'md' : 'xs'} />)}
           </div>
-          <Dots points={player.points} small={small} />
-          {player.bid !== null && (
-            <div className="flex items-center gap-1 bg-black/40 border border-blue-800/30 rounded-full px-2 py-0.5">
-              <span className="text-cyan-300 font-black text-xs">{player.bid}</span>
-              <span className="text-blue-700/50 text-[10px] mx-0.5">·</span>
-              <span className="text-green-400 font-black text-xs">{player.tricksWon}</span>
-            </div>
-          )}
-          {isCurrentBidder && player.bid === null && (
-            <div className="text-cyan-400 text-xs animate-pulse">Declarando...</div>
-          )}
-          {!player.eliminated && (
-            <div className="flex gap-0.5 flex-wrap justify-center">
-              {showCards
-                ? sortedHand.map((card) => (
-                    <CardComponent
-                      key={card.id}
-                      card={card}
-                      isManilha={card.value === manilhaValue}
-                      size={bigCards ? 'md' : small ? 'xs' : 'sm'}
-                    />
-                  ))
-                : sortedHand.map((_, i) => <CardBack key={i} size={bigCards ? 'md' : small ? 'xs' : 'sm'} />)}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     );
   }
 
-  // Full layout — human player
+  // Human player — fanned hand (+ info row unless composed externally)
+  const cardSize: CardSize = xlCards ? 'xl' : 'lg';
+  const overlap = handOverlap(sortedHand.length, !!xlCards);
+
+  const fan = !player.eliminated && (
+    <div className={`flex items-end justify-center pt-2.5 ${overlap}`}>
+      {sortedHand.map((card, i) => {
+        const selected = card.id === selectedCardId;
+        return (
+          <div
+            key={card.id}
+            className={`transition-transform duration-150 ${selected ? 'z-10' : ''}`}
+            style={{ transform: fanTransform(i, sortedHand.length, selected) }}
+          >
+            {showCards ? (
+              <CardComponent
+                card={card}
+                isManilha={card.value === manilhaValue}
+                selected={selected}
+                clickable={!!onCardClick}
+                onClick={() => onCardClick?.(card.id)}
+                size={cardSize}
+              />
+            ) : (
+              <CardBack
+                size={cardSize}
+                selected={selected}
+                clickable={!!onCardClick}
+                onClick={() => onCardClick?.(card.id)}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  if (handOnly) return <div className={elim}>{fan}</div>;
+
   return (
-    <div
-      className={`flex flex-col items-center gap-2 rounded-2xl px-4 py-3 transition-all
-        bg-black/30 border border-blue-900/30 backdrop-blur-sm w-full
-        ${elim} ${highlight}`}
-    >
-      <div className="flex items-center gap-2">
-        <span className="text-slate-100 font-semibold text-sm">{player.name}</span>
-        {isDealer && (
-          <span className="bg-cyan-800 text-cyan-100 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow">
-            D
-          </span>
-        )}
-        {player.eliminated && <span className="text-red-400 text-xs font-bold">✕</span>}
-        {playOrder !== undefined && (
-          <span className={`text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border leading-none ${
-            hasPlayedInTrick
-              ? 'bg-green-900/60 text-green-400 border-green-700/40'
-              : 'bg-blue-900/70 text-cyan-300 border-blue-700/50'
-          }`}>
-            {playOrder}
-          </span>
-        )}
+    <div className={`flex flex-col items-center gap-2 w-full ${elim}`}>
+      <div className="flex justify-between items-center w-full px-1.5">
+        <span className="text-cream text-[13px] font-semibold">
+          {player.name}
+          {player.bid !== null && ` · tentos ${player.bid} · fez ${player.tricksWon}`}
+          {isDealer && <span className="text-gold font-bold tracking-[1.5px] text-[10px]"> · CARTEIA</span>}
+        </span>
+        <Dots points={player.points} />
       </div>
-
-      <Dots points={player.points} />
-
-      {player.bid !== null && (
-        <div className="flex items-center gap-1.5 bg-black/40 border border-blue-800/30 rounded-full px-4 py-1.5">
-          <span className="text-blue-600/60 text-xs uppercase tracking-wider">Tentos</span>
-          <span className="text-cyan-300 font-black text-lg leading-none">{player.bid}</span>
-          <span className="text-blue-700/50 text-sm mx-0.5">·</span>
-          <span className="text-green-400 font-black text-lg leading-none">{player.tricksWon}</span>
-          <span className="text-green-800/50 text-xs uppercase tracking-wider">ganhos</span>
-        </div>
-      )}
-
-      {isCurrentBidder && player.bid === null && (
-        <div className="text-cyan-400 text-xs font-semibold animate-pulse">Declarando...</div>
-      )}
-
-      {!player.eliminated && (
-        <div className="flex gap-1.5 justify-center py-2">
-          {showCards
-            ? sortedHand.map((card) => (
-                <CardComponent
-                  key={card.id}
-                  card={card}
-                  isManilha={card.value === manilhaValue}
-                  clickable={!!onCardClick}
-                  onClick={() => onCardClick?.(card.id)}
-                  size="lg"
-                />
-              ))
-            : sortedHand.map((card, i) => (
-                <CardBack
-                  key={i}
-                  size="lg"
-                  clickable={!!onCardClick}
-                  onClick={() => onCardClick?.(card.id)}
-                />
-              ))}
-        </div>
-      )}
+      {fan}
     </div>
   );
 }

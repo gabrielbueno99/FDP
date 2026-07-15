@@ -1,35 +1,71 @@
 @import "tailwindcss";
 
 :root {
-  --background: #030712;
-  --foreground: #e2e8f0;
+  --background: #071410;
+  --foreground: #ead9ac;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-display: var(--font-playfair);
+  --font-display: var(--font-instrument-serif);
+  --font-sans: var(--font-instrument-sans);
+
+  /* Cassino noturno palette */
+  --color-gold: #c9a55a;
+  --color-cream: #ead9ac;
+  --color-card: #f4eddc;
+  --color-card-black: #1d1d1d;
+  --color-card-red: #b03434;
+  --color-danger: #d97a7a;
+  --color-ok: #7fc98a;
+  --color-ink: #0b1f18;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-instrument-sans), system-ui, sans-serif;
 }
 
-.wood-bg {
-  background-color: #030712;
-  background-image:
-    linear-gradient(rgba(0, 212, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 212, 255, 0.025) 1px, transparent 1px),
-    radial-gradient(ellipse at 50% 0%, rgba(0, 100, 200, 0.08) 0%, transparent 60%);
-  background-size: 48px 48px, 48px 48px, 100% 100%;
+/* Lobby / telas de entrada — verde profundo vindo do topo */
+.lobby-bg {
+  background: radial-gradient(120% 90% at 50% 0%, #14352a 0%, #0b1f18 55%, #071410 100%);
 }
 
+/* Mesa mobile — feltro iluminado do centro */
+.table-bg {
+  background: radial-gradient(130% 100% at 50% 30%, #175038 0%, #0e3122 55%, #081e15 100%);
+}
+
+/* Mesa desktop — sala escura ao redor do oval */
+.room-bg {
+  background: radial-gradient(90% 120% at 50% 45%, #0f2c20 0%, #0a1e16 55%, #060f0b 100%);
+}
+
+/* Oval de feltro com borda de madeira */
 .felt-center {
-  background: radial-gradient(ellipse at 50% 40%, #0d2137 0%, #071626 55%, #030e1a 100%);
+  background: radial-gradient(ellipse at 50% 40%, #1b5c40 0%, #124230 55%, #0d3323 100%);
   box-shadow:
-    inset 0 0 80px rgba(0, 0, 0, 0.7),
-    inset 0 0 25px rgba(0, 0, 0, 0.5),
-    inset 0 0 60px rgba(0, 212, 255, 0.04);
+    inset 0 0 80px rgba(0, 0, 0, 0.55),
+    inset 0 0 25px rgba(0, 0, 0, 0.4);
+}
+
+.table-rail {
+  background: #241a10;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  outline: 1px solid rgba(201, 165, 90, 0.35);
+}
+
+/* Botão dourado primário */
+.btn-gold {
+  background: linear-gradient(180deg, #d8b56a, #b8934a);
+  color: #0b1f18;
+  box-shadow: 0 4px 14px rgba(201, 165, 90, 0.25);
+}
+
+/* Verso de carta — feltro com filete dourado */
+.card-back {
+  background: linear-gradient(135deg, #1c4a35, #123527);
+  border: 1px solid rgba(201, 165, 90, 0.4);
 }
