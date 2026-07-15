@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 
 interface BidPanelProps {
   cardsInRound: number;
@@ -9,46 +10,41 @@ interface BidPanelProps {
 }
 
 export function BidPanel({ cardsInRound, forbiddenBid, onBid, tentoDiff, bidsPlaced }: BidPanelProps) {
+  const [selected, setSelected] = useState<number | null>(null);
+
   return (
-    <div className="bg-black/40 border border-blue-900/40 rounded-2xl p-4 flex flex-col items-center gap-3 backdrop-blur-sm shadow-xl">
-      <p className="text-cyan-300 font-semibold text-sm tracking-wide">
-        Quantos tentos você vai fazer?
-      </p>
+    <div className="flex flex-col items-center gap-4 py-2 w-full">
+      <div className="text-center flex flex-col gap-1.5">
+        <span className="font-display text-cream text-2xl leading-tight">
+          Quantos tentos você faz?
+        </span>
+        {bidsPlaced > 0 && (
+          <span className="self-center px-3.5 py-1 rounded-full border border-gold/40 text-gold text-xs font-semibold">
+            {tentoDiff === 0
+              ? 'conta fechada, alguém vai errar'
+              : tentoDiff > 0
+                ? `sobra${tentoDiff > 1 ? 'm' : ''} ${tentoDiff} tento${tentoDiff > 1 ? 's' : ''} declarado${tentoDiff > 1 ? 's' : ''}`
+                : `falta${Math.abs(tentoDiff) > 1 ? 'm' : ''} ${Math.abs(tentoDiff)} tento${Math.abs(tentoDiff) > 1 ? 's' : ''}`}
+          </span>
+        )}
+      </div>
 
-      {bidsPlaced > 0 && (
-        <div className={`text-xs px-3 py-1 rounded-full border font-bold ${
-          tentoDiff > 0
-            ? 'bg-red-950/60 border-red-700/40 text-red-400'
-            : tentoDiff < 0
-              ? 'bg-yellow-950/60 border-yellow-700/40 text-yellow-400'
-              : 'bg-green-950/60 border-green-700/40 text-green-400'
-        }`}>
-          {tentoDiff > 0
-            ? `Sobra ${tentoDiff} tento${tentoDiff > 1 ? 's' : ''}`
-            : tentoDiff < 0
-              ? `Falta ${Math.abs(tentoDiff)} tento${Math.abs(tentoDiff) > 1 ? 's' : ''}`
-              : 'Fechado!'}
-        </div>
-      )}
-
-      {forbiddenBid !== null && (
-        <p className="text-red-400/80 text-xs">
-          Não pode declarar {forbiddenBid}
-        </p>
-      )}
-      <div className="flex flex-wrap gap-2.5 justify-center">
+      <div className="flex gap-3 flex-wrap justify-center">
         {Array.from({ length: cardsInRound + 1 }, (_, i) => {
           const isForbidden = i === forbiddenBid;
+          const isSelected = i === selected;
           return (
             <button
               key={i}
               disabled={isForbidden}
-              onClick={() => onBid(i)}
+              onClick={() => setSelected(i)}
               className={[
-                'w-11 h-11 rounded-full font-bold text-sm transition-all border shadow',
+                'w-14 h-14 rounded-full font-display text-2xl transition-all',
                 isForbidden
-                  ? 'bg-gray-900/50 text-gray-600 border-gray-700/30 cursor-not-allowed opacity-40'
-                  : 'bg-cyan-800 hover:bg-cyan-600 text-cyan-100 border-cyan-700/60 hover:scale-110 active:scale-95 hover:shadow-[0_0_12px_rgba(0,212,255,0.3)]',
+                  ? 'border border-gold/15 text-cream/30 cursor-not-allowed'
+                  : isSelected
+                    ? 'btn-gold text-ink shadow-[0_6px_18px_rgba(201,165,90,0.35)]'
+                    : 'border border-gold/40 text-cream hover:border-gold active:scale-95',
               ].join(' ')}
             >
               {i}
@@ -56,6 +52,20 @@ export function BidPanel({ cardsInRound, forbiddenBid, onBid, tentoDiff, bidsPla
           );
         })}
       </div>
+
+      {forbiddenBid !== null && (
+        <p className="text-cream/45 text-xs text-center">
+          {forbiddenBid} está bloqueado pra você — o carteador não pode fechar a conta
+        </p>
+      )}
+
+      <button
+        onClick={() => selected !== null && onBid(selected)}
+        disabled={selected === null}
+        className="btn-gold h-13 w-60 rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {selected === null ? 'Escolha seus tentos' : `Declarar ${selected} tento${selected === 1 ? '' : 's'}`}
+      </button>
     </div>
   );
 }

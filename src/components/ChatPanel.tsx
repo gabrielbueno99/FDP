@@ -8,17 +8,6 @@ interface ChatPanelProps {
   onSend: (text: string) => void;
 }
 
-const COLORS = [
-  'text-cyan-400',
-  'text-blue-400',
-  'text-green-400',
-  'text-pink-400',
-  'text-purple-400',
-  'text-violet-400',
-  'text-orange-400',
-  'text-rose-400',
-];
-
 export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -36,25 +25,26 @@ export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2">
+      <div className="flex-1 overflow-y-auto px-3.5 py-2.5 space-y-2.5">
         {messages.length === 0 && (
-          <p className="text-blue-800/50 text-xs text-center mt-6">
-            Nenhuma mensagem ainda...
+          <p className="text-cream/35 text-xs text-center mt-6 italic">
+            nenhuma mensagem ainda…
           </p>
         )}
         {messages.map((msg) => {
           const isMine = msg.playerId === myPlayerId;
-          const color = COLORS[msg.playerId % COLORS.length];
           return (
             <div key={msg.id} className={`flex flex-col gap-0.5 ${isMine ? 'items-end' : 'items-start'}`}>
               {!isMine && (
-                <span className={`text-[10px] font-bold px-1 ${color}`}>{msg.name}</span>
+                <span className="text-gold text-[10.5px] font-bold px-1">{msg.name.toUpperCase()}</span>
               )}
-              <div className={`max-w-[82%] px-3 py-1.5 rounded-2xl text-sm leading-snug break-words ${
-                isMine
-                  ? 'bg-cyan-800/70 text-cyan-100 rounded-br-none'
-                  : 'bg-black/50 text-slate-100 rounded-bl-none border border-blue-900/30'
-              }`}>
+              <div
+                className={`max-w-[82%] px-3 py-[7px] rounded-xl text-[13px] leading-snug break-words text-cream ${
+                  isMine
+                    ? 'bg-gold/20 border border-gold/35 rounded-br-[3px]'
+                    : 'bg-white/[0.06] border border-white/10 rounded-bl-[3px]'
+                }`}
+              >
                 {msg.text}
               </div>
             </div>
@@ -63,20 +53,20 @@ export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex gap-2 px-3 py-2.5 border-t border-blue-900/30 shrink-0">
+      <div className="flex gap-2 px-3.5 py-2.5 border-t border-white/10 shrink-0">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="Mensagem..."
+          placeholder="Mensagem…"
           maxLength={200}
-          className="flex-1 bg-black/40 border border-blue-800/40 text-slate-100 rounded-xl px-3 py-2 text-sm outline-none focus:border-cyan-600/70 transition-colors placeholder-blue-900/50"
+          className="flex-1 h-[38px] bg-white/5 border border-white/10 text-cream rounded-[10px] px-3 text-[13px] outline-none focus:border-gold/60 transition-colors placeholder:text-cream/35"
         />
         <button
           onClick={submit}
           disabled={!input.trim()}
-          className="bg-cyan-700 hover:bg-cyan-600 disabled:bg-blue-950/50 disabled:text-blue-900/40 text-cyan-100 font-bold px-4 rounded-xl transition-colors border border-cyan-600/40"
+          className="btn-gold w-[38px] h-[38px] rounded-[10px] font-bold text-base transition-all hover:brightness-110 disabled:opacity-40"
         >
           ↑
         </button>

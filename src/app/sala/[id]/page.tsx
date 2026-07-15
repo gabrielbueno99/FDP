@@ -6,6 +6,7 @@ import { useGame } from '../../../hooks/useGame';
 import { GameBoard } from '../../../components/GameBoard';
 import { DisconnectOverlay } from '../../../components/DisconnectOverlay';
 import { ChatPanel } from '../../../components/ChatPanel';
+import { avatarColor, initials } from '../../../components/PlayerArea';
 import { ChatMessage } from '../../../lib/types';
 
 interface PageProps {
@@ -32,12 +33,15 @@ function ChatWidget({ messages, myPlayerId, onSend }: ChatWidgetProps) {
   return (
     <div className="fixed bottom-4 right-3 z-40 flex flex-col items-end gap-2">
       {open && (
-        <div className="w-72 flex flex-col bg-blue-950/97 border border-blue-800/50 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-md" style={{ height: '320px' }}>
-          <div className="flex items-center justify-between px-3 py-2 border-b border-blue-900/40 shrink-0 bg-black/30">
-            <span className="text-cyan-300 font-bold text-xs tracking-wide uppercase">Chat da Sala</span>
+        <div
+          className="w-72 flex flex-col bg-black/80 border border-white/10 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-md"
+          style={{ height: '320px' }}
+        >
+          <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-white/10 shrink-0">
+            <span className="text-gold font-bold text-[10.5px] tracking-[1.5px]">CHAT DA MESA</span>
             <button
               onClick={() => setOpen(false)}
-              className="text-blue-700 hover:text-cyan-300 text-lg leading-none transition-colors"
+              className="text-cream/50 hover:text-gold text-lg leading-none transition-colors"
             >
               ×
             </button>
@@ -48,11 +52,11 @@ function ChatWidget({ messages, myPlayerId, onSend }: ChatWidgetProps) {
 
       <button
         onClick={() => { setOpen((v) => !v); setUnread(0); }}
-        className="relative w-11 h-11 rounded-full bg-blue-800 hover:bg-blue-700 active:scale-95 flex items-center justify-center shadow-xl border border-blue-600/50 transition-all"
+        className="relative w-11 h-11 rounded-full border border-gold/40 bg-black/50 hover:border-gold active:scale-95 flex items-center justify-center shadow-xl transition-all"
       >
-        <span className="text-lg leading-none">{open ? '×' : '💬'}</span>
+        <span className="text-gold text-lg leading-none">{open ? '×' : '💬'}</span>
         {!open && unread > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-0.5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center shadow">
+          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-0.5 bg-gold text-ink text-[9px] font-black rounded-full flex items-center justify-center shadow">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -61,14 +65,32 @@ function ChatWidget({ messages, myPlayerId, onSend }: ChatWidgetProps) {
   );
 }
 
-function JoinForm({ onJoin }: { onJoin: (name: string) => void }) {
+function JoinForm({ roomCode, hostName, seated, onJoin }: {
+  roomCode: string;
+  hostName: string | null;
+  seated: number;
+  onJoin: (name: string) => void;
+}) {
   const [name, setName] = useState('');
   return (
-    <div className="min-h-screen wood-bg flex items-center justify-center p-6">
-      <div className="bg-black/35 border border-blue-900/35 rounded-2xl p-6 w-full max-w-sm flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
-        <h2 className="text-cyan-200 font-bold text-xl text-center tracking-wide">Entrar na Sala</h2>
+    <div className="min-h-screen lobby-bg flex flex-col items-center justify-center p-7">
+      <div className="flex gap-3.5 text-gold text-[15px] tracking-[6px]">♣ ♥ ♠ ♦</div>
+      <h1 className="font-display text-cream text-7xl leading-none mt-4">FDP</h1>
+
+      <div className="text-center mt-9 flex flex-col gap-1.5">
+        <span className="font-display text-cream text-3xl leading-tight">
+          {hostName ? `${hostName} te chamou` : 'Te chamaram'}
+          <br />
+          pra mesa
+        </span>
+        <span className="font-display italic text-gold text-[15px]">
+          sala {roomCode}{seated > 0 ? ` · ${seated} na mesa` : ''}
+        </span>
+      </div>
+
+      <div className="w-full max-w-sm mt-9 flex flex-col gap-3.5">
         <div className="flex flex-col gap-2">
-          <label className="text-blue-700/70 text-xs uppercase tracking-widest">Seu nome</label>
+          <label className="text-cream/55 text-[11px] tracking-[2px] pl-1">SEU NOME NA MESA</label>
           <input
             type="text"
             value={name}
@@ -76,17 +98,23 @@ function JoinForm({ onJoin }: { onJoin: (name: string) => void }) {
             onKeyDown={(e) => e.key === 'Enter' && name.trim() && onJoin(name.trim())}
             placeholder="Como te chamamos?"
             maxLength={16}
-            className="bg-black/40 border border-blue-800/40 text-slate-100 rounded-xl px-4 py-3 outline-none focus:border-cyan-500/70 transition-colors placeholder-blue-900/50"
+            className="h-[54px] rounded-xl bg-white/5 border border-gold/40 text-cream px-[18px] outline-none focus:border-gold transition-colors placeholder:text-cream/30"
           />
         </div>
         <button
           onClick={() => name.trim() && onJoin(name.trim())}
           disabled={!name.trim()}
-          className="bg-cyan-700 hover:bg-cyan-600 disabled:bg-blue-950/40 disabled:text-blue-900/40 text-cyan-100 font-bold py-3 rounded-xl transition-colors border border-cyan-600/40 shadow-lg"
+          className="btn-gold h-[54px] rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Entrar
+          Sentar na mesa
         </button>
       </div>
+
+      <p className="text-center text-cream/45 text-xs leading-normal mt-10">
+        Declare seus tentos. Erre e perca uma vida.
+        <br />
+        Cinco vidas. Último de pé leva.
+      </p>
     </div>
   );
 }
@@ -121,6 +149,9 @@ export default function SalaPage({ params }: PageProps) {
   if (!nameInput) {
     return (
       <JoinForm
+        roomCode={roomCode}
+        hostName={null}
+        seated={0}
         onJoin={(n) => {
           sessionStorage.setItem('fdp-name', n);
           setNameInput(n);
@@ -132,15 +163,15 @@ export default function SalaPage({ params }: PageProps) {
 
   if (mp.error) {
     return (
-      <div className="min-h-screen wood-bg flex items-center justify-center p-6">
-        <div className="bg-black/35 border border-red-800/40 rounded-2xl p-6 max-w-sm w-full text-center flex flex-col gap-4 backdrop-blur-sm shadow-2xl">
-          <div className="text-red-400 text-4xl">⚠</div>
-          <p className="text-slate-100 font-semibold">{mp.error}</p>
+      <div className="min-h-screen lobby-bg flex items-center justify-center p-7">
+        <div className="w-full max-w-sm text-center flex flex-col items-center gap-4">
+          <div className="text-danger text-4xl">⚠</div>
+          <p className="font-display text-cream text-2xl">{mp.error}</p>
           <button
             onClick={() => router.push('/')}
-            className="bg-blue-900/50 hover:bg-blue-800/60 text-cyan-300 font-bold py-3 rounded-xl transition-colors border border-blue-800/30"
+            className="w-full h-13 rounded-xl border border-gold/45 text-cream font-semibold text-[15px] transition-all hover:bg-white/[0.04] active:scale-95"
           >
-            Voltar ao Início
+            Voltar ao início
           </button>
         </div>
       </div>
@@ -149,10 +180,12 @@ export default function SalaPage({ params }: PageProps) {
 
   if (!mp.isConnected || mp.role === 'connecting') {
     return (
-      <div className="min-h-screen wood-bg flex items-center justify-center">
+      <div className="min-h-screen lobby-bg flex items-center justify-center">
         <div className="text-center flex flex-col items-center gap-4">
-          <div className="font-display font-black text-cyan-400 text-5xl tracking-widest">FDP</div>
-          <div className="text-blue-700/60 animate-pulse text-sm">Conectando à sala {roomCode}...</div>
+          <div className="font-display text-cream text-6xl">FDP</div>
+          <div className="font-display italic text-gold animate-pulse text-[15px]">
+            conectando à sala {roomCode}…
+          </div>
         </div>
       </div>
     );
@@ -194,76 +227,106 @@ export default function SalaPage({ params }: PageProps) {
 
   // Lobby
   const roomUrl = typeof window !== 'undefined' ? `${window.location.origin}/sala/${roomCode}` : '';
+  const emptySeats = Math.max(0, playerCount - mp.lobbyPlayers.length);
 
   return (
     <>
-      <div className="min-h-screen wood-bg flex flex-col items-center justify-center p-6 gap-6">
-        <h1 className="font-display font-black text-cyan-400 text-5xl tracking-widest drop-shadow-[0_0_16px_rgba(0,212,255,0.3)]">
-          FDP
-        </h1>
-
-        <div className="bg-black/35 border border-blue-900/35 rounded-2xl p-6 w-full max-w-sm flex flex-col gap-5 backdrop-blur-sm shadow-2xl">
-          <div className="text-center">
-            <p className="text-blue-700/60 text-[10px] uppercase tracking-widest mb-1">Código da Sala</p>
-            <p className="font-display font-black text-cyan-400 text-4xl tracking-widest">{roomCode}</p>
+      <div className="min-h-screen lobby-bg flex flex-col items-center justify-center p-7">
+        <div className="w-full max-w-sm flex flex-col">
+          <div className="flex flex-col items-center gap-1.5">
+            <span className="font-display italic text-gold text-base">sua mesa está pronta</span>
+            <h1 className="font-display text-cream text-4xl leading-none text-center">
+              Sala {isHost ? (playerName ?? '') : roomCode}
+            </h1>
           </div>
 
-          <div className="flex gap-2">
-            <input
-              readOnly
-              value={roomUrl}
-              className="flex-1 bg-black/40 text-blue-600/70 text-xs rounded-xl px-3 py-2 outline-none truncate border border-blue-900/30"
-            />
-            <button
-              onClick={() => navigator.clipboard.writeText(roomUrl)}
-              className="bg-blue-800/50 hover:bg-blue-700/60 text-cyan-300 text-xs px-3 py-2 rounded-xl transition-colors border border-blue-700/30 whitespace-nowrap"
-            >
-              Copiar
-            </button>
+          <div className="mt-7 bg-white/[0.04] border border-gold/35 rounded-2xl px-5 py-[18px] flex flex-col gap-3">
+            <span className="text-cream/55 text-[11px] tracking-[2px]">CÓDIGO DA MESA</span>
+            <div className="flex justify-between items-center">
+              <span className="font-display text-cream text-4xl tracking-[10px]">{roomCode}</span>
+              <button
+                onClick={() => navigator.clipboard.writeText(roomUrl)}
+                className="btn-gold h-[42px] px-[18px] rounded-[10px] font-bold text-[13.5px] transition-all hover:brightness-110 active:scale-95"
+              >
+                Copiar link
+              </button>
+            </div>
+            <div className="h-px bg-gradient-to-r from-transparent via-gold/40 to-transparent" />
+            <span className="text-cream/55 text-[12.5px] text-center">
+              mande no grupo — quem clicar senta na mesa
+            </span>
           </div>
 
-          <div>
-            <p className="text-blue-700/60 text-xs mb-2 uppercase tracking-widest">
-              Jogadores ({mp.lobbyPlayers.length}/{playerCount})
-            </p>
-            <div className="space-y-2">
-              {mp.lobbyPlayers.map((p) => (
-                <div key={p.id} className="flex items-center gap-2 bg-black/25 rounded-xl px-3 py-2 border border-blue-900/20">
-                  <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_4px_rgba(74,222,128,0.5)]" />
-                  <span className="text-slate-100 text-sm">
-                    {p.name}
-                    {p.id === 0 && <span className="text-blue-700/60 text-xs"> (host)</span>}
-                    {p.id === mp.myPlayerId && p.id !== 0 && <span className="text-blue-700/60 text-xs"> (você)</span>}
+          <div className="mt-6 flex flex-col gap-2.5">
+            <div className="flex justify-between items-baseline px-1">
+              <span className="text-cream/55 text-[11px] tracking-[2px]">NA MESA</span>
+              <span className="text-cream/55 text-xs">
+                {mp.lobbyPlayers.length} de {playerCount}
+              </span>
+            </div>
+            {mp.lobbyPlayers.map((p) => (
+              <div
+                key={p.id}
+                className={`flex items-center gap-3 px-3.5 py-3 rounded-[14px] bg-white/[0.04] border ${
+                  p.id === mp.myPlayerId ? 'border-gold/35' : 'border-white/10'
+                }`}
+              >
+                <div
+                  className="w-[38px] h-[38px] rounded-full flex items-center justify-center font-bold text-[13px]"
+                  style={
+                    p.id === 0
+                      ? { background: '#c9a55a', color: '#0b1f18' }
+                      : { background: avatarColor(p.id), color: '#ead9ac' }
+                  }
+                >
+                  {initials(p.name)}
+                </div>
+                <div className="flex flex-col gap-px flex-1">
+                  <span className="text-cream font-semibold text-sm">{p.name}</span>
+                  <span className={p.id === 0 ? 'text-cream/55 text-xs' : 'text-ok text-xs'}>
+                    {p.id === 0 ? 'anfitrião' : 'pronto'}
                   </span>
                 </div>
-              ))}
-              {Array.from({ length: Math.max(0, playerCount - mp.lobbyPlayers.length) }, (_, i) => (
-                <div key={`empty-${i}`} className="flex items-center gap-2 bg-black/15 rounded-xl px-3 py-2 border border-blue-900/10">
-                  <div className="w-2 h-2 rounded-full bg-blue-900/40" />
-                  <span className="text-blue-900/50 text-sm">Aguardando...</span>
+                {p.id === mp.myPlayerId && <span className="text-gold text-base">♠</span>}
+              </div>
+            ))}
+            {Array.from({ length: emptySeats }, (_, i) => (
+              <div
+                key={`empty-${i}`}
+                className="flex items-center gap-3 px-3.5 py-3 rounded-[14px] border border-dashed border-gold/30"
+                style={{ opacity: 1 - i * 0.25 }}
+              >
+                <div className="w-[38px] h-[38px] rounded-full border border-dashed border-gold/40 flex items-center justify-center text-cream/35">
+                  ?
                 </div>
-              ))}
-            </div>
+                <span className="text-cream/40 text-[13.5px] italic">lugar vazio…</span>
+              </div>
+            ))}
           </div>
 
-          {mp.role === 'host' && (
-            <button
-              onClick={() => mp.startGame(playerCount)}
-              disabled={mp.lobbyPlayers.length < 1}
-              className="bg-cyan-700 hover:bg-cyan-600 disabled:bg-blue-950/40 disabled:text-blue-900/40 text-cyan-100 font-bold py-3 rounded-xl transition-all hover:scale-105 active:scale-95 border border-cyan-600/40 shadow-lg"
-            >
-              Iniciar Partida
-              {mp.lobbyPlayers.length < playerCount && (
-                <span className="text-xs font-normal ml-1 opacity-70">(bots para vagas vazias)</span>
-              )}
-            </button>
-          )}
-
-          {mp.role === 'guest' && (
-            <p className="text-blue-700/50 text-sm text-center animate-pulse">
-              Aguardando o host iniciar...
-            </p>
-          )}
+          <div className="mt-7 flex flex-col gap-3">
+            {mp.role === 'host' && (
+              <>
+                <button
+                  onClick={() => mp.startGame(playerCount)}
+                  disabled={mp.lobbyPlayers.length < 1}
+                  className="btn-gold h-13 rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Começar com {mp.lobbyPlayers.length} jogador{mp.lobbyPlayers.length > 1 ? 'es' : ''}
+                </button>
+                {mp.lobbyPlayers.length < playerCount && (
+                  <p className="text-center text-cream/45 text-xs">
+                    lugares vazios viram bots — com 4+ fica bom de verdade
+                  </p>
+                )}
+              </>
+            )}
+            {mp.role === 'guest' && (
+              <p className="font-display italic text-gold text-[15px] text-center animate-pulse">
+                aguardando o anfitrião abrir o jogo…
+              </p>
+            )}
+          </div>
         </div>
       </div>
       {chatWidget}
