@@ -127,10 +127,6 @@ export default function SalaPage({ params }: PageProps) {
     if (typeof window !== 'undefined') return sessionStorage.getItem('fdp-name');
     return null;
   });
-  const [playerCount] = useState(() => {
-    if (typeof window !== 'undefined') return Number(sessionStorage.getItem('fdp-playercount') ?? '4');
-    return 4;
-  });
 
   const [nameInput, setNameInput] = useState<string | null>(playerName);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -310,7 +306,7 @@ export default function SalaPage({ params }: PageProps) {
 
   // Lobby
   const roomUrl = typeof window !== 'undefined' ? `${window.location.origin}/sala/${roomCode}` : '';
-  const emptySeats = Math.max(0, playerCount - mp.lobbyPlayers.length);
+  const canStart = mp.lobbyPlayers.length >= 2;
 
   return (
     <>
@@ -344,7 +340,7 @@ export default function SalaPage({ params }: PageProps) {
             <div className="flex justify-between items-baseline px-1">
               <span className="text-cream/55 text-[11px] tracking-[2px]">NA MESA</span>
               <span className="text-cream/55 text-xs">
-                {mp.lobbyPlayers.length} de {playerCount}
+                {mp.lobbyPlayers.length} jogador{mp.lobbyPlayers.length > 1 ? 'es' : ''}
               </span>
             </div>
             {mp.lobbyPlayers.map((p) => (
@@ -382,35 +378,33 @@ export default function SalaPage({ params }: PageProps) {
                 )}
               </div>
             ))}
-            {Array.from({ length: emptySeats }, (_, i) => (
-              <div
-                key={`empty-${i}`}
-                className="flex items-center gap-3 px-3.5 py-3 rounded-[14px] border border-dashed border-gold/30"
-                style={{ opacity: 1 - i * 0.25 }}
-              >
+            {mp.lobbyPlayers.length < 2 && (
+              <div className="flex items-center gap-3 px-3.5 py-3 rounded-[14px] border border-dashed border-gold/30">
                 <div className="w-[38px] h-[38px] rounded-full border border-dashed border-gold/40 flex items-center justify-center text-cream/35">
                   ?
                 </div>
-                <span className="text-cream/40 text-[13.5px] italic">lugar vazio…</span>
+                <span className="text-cream/40 text-[13.5px] italic">esperando a galera entrar…</span>
               </div>
-            ))}
+            )}
           </div>
 
           <div className="mt-7 flex flex-col gap-3">
             {mp.role === 'host' && (
               <>
                 <button
-                  onClick={() => mp.startGame(playerCount)}
-                  disabled={mp.lobbyPlayers.length < 1}
-                  className="btn-gold h-13 rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => mp.startGame()}
+                  disabled={!canStart}
+                  className="btn-gold h-13 rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Começar com {mp.lobbyPlayers.length} jogador{mp.lobbyPlayers.length > 1 ? 'es' : ''}
+                  {canStart
+                    ? `Começar com ${mp.lobbyPlayers.length} jogadores`
+                    : 'Aguardando jogadores…'}
                 </button>
-                {mp.lobbyPlayers.length < playerCount && (
-                  <p className="text-center text-cream/45 text-xs">
-                    lugares vazios viram bots — com 4+ fica bom de verdade
-                  </p>
-                )}
+                <p className="text-center text-cream/45 text-xs">
+                  {canStart
+                    ? 'pode começar agora ou esperar mais gente entrar'
+                    : 'compartilhe o código — precisa de pelo menos 2'}
+                </p>
               </>
             )}
             {mp.role === 'guest' && (
