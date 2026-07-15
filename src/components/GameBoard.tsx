@@ -63,6 +63,7 @@ export function GameBoard({
   // Card ids are stable across rounds, so a stale selection would carry over —
   // reset it whenever the round or phase changes (adjust-state-during-render).
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [confirmExit, setConfirmExit] = useState(false);
   const [prevSelectionKey, setPrevSelectionKey] = useState('');
   const selectionKey = `${round}-${phase}`;
   if (selectionKey !== prevSelectionKey) {
@@ -193,6 +194,44 @@ export function GameBoard({
     </span>
   );
 
+  const exitButton = (
+    <button
+      onClick={() => setConfirmExit(true)}
+      className="text-cream/55 hover:text-gold text-xs border border-white/12 hover:border-gold/50 rounded-full px-3 py-[5px] transition-colors leading-none"
+    >
+      Sair
+    </button>
+  );
+
+  const exitConfirm = confirmExit && (
+    <div className="fixed inset-0 z-[60] bg-[rgba(7,20,16,0.9)] backdrop-blur-[3px] flex items-center justify-center p-6">
+      <div className="w-full max-w-xs flex flex-col items-center text-center">
+        <span className="font-display text-cream text-[26px] leading-tight">
+          Abandonar a partida?
+        </span>
+        <span className="text-cream/55 text-sm mt-1.5">
+          {isMultiplayer
+            ? 'Você sai da mesa e volta ao início.'
+            : 'O progresso desta partida será perdido.'}
+        </span>
+        <div className="flex gap-3 w-full mt-6">
+          <button
+            onClick={() => setConfirmExit(false)}
+            className="flex-1 h-12 rounded-xl border border-gold/45 text-cream font-semibold transition-all hover:bg-white/[0.04] active:scale-95"
+          >
+            Continuar
+          </button>
+          <button
+            onClick={onRestart}
+            className="flex-1 h-12 rounded-xl bg-card-red/85 hover:bg-card-red text-cream font-bold transition-all active:scale-95"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderOpponent = (player: (typeof players)[number]) => (
     <PlayerArea
       player={player}
@@ -216,7 +255,10 @@ export function GameBoard({
       <div className="h-dvh room-bg flex flex-col select-none overflow-hidden">
         {/* Top bar */}
         <div className="shrink-0 z-20 flex items-center justify-between px-10 py-5">
-          <span className="font-display text-cream text-[28px] leading-none">FDP</span>
+          <div className="flex items-center gap-4">
+            <span className="font-display text-cream text-[28px] leading-none">FDP</span>
+            {exitButton}
+          </div>
           <div className="flex items-center gap-5">
             <span className="text-cream/60 text-[13px] tracking-[2px]">{roundLabel}</span>
             {tentoPill}
@@ -331,6 +373,7 @@ export function GameBoard({
         {phase === 'round-end' && (
           <RoundSummary state={state} humanId={humanId} onNext={onNextRound} isMultiplayer={isMultiplayer} />
         )}
+        {exitConfirm}
       </div>
     );
   }
@@ -340,7 +383,10 @@ export function GameBoard({
     <div className="h-dvh table-bg flex flex-col select-none overflow-hidden">
       {/* Header */}
       <div className="shrink-0 flex items-center justify-between px-4 pt-5 pb-1">
-        <span className="font-display text-cream text-xl leading-none">FDP</span>
+        <div className="flex items-center gap-2.5">
+          <span className="font-display text-cream text-xl leading-none">FDP</span>
+          {exitButton}
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-cream/60 text-xs tracking-[1px]">{roundLabel}</span>
           {tentoPill}
@@ -385,6 +431,7 @@ export function GameBoard({
             showCards={humanSeesCards}
             onCardClick={canPlayCard ? handleCardClick : undefined}
             selectedCardId={selectedCardId}
+            hideable
           />
         )}
         {canPlayCard && (
@@ -399,6 +446,7 @@ export function GameBoard({
       {phase === 'round-end' && (
         <RoundSummary state={state} humanId={humanId} onNext={onNextRound} isMultiplayer={isMultiplayer} />
       )}
+      {exitConfirm}
     </div>
   );
 }

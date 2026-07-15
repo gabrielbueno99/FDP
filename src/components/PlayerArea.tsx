@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import { Player, Value } from '../lib/types';
 import { CardBack, CardComponent, CardSize } from './CardComponent';
 import { getCardStrength } from '../lib/deck';
@@ -22,7 +23,11 @@ interface PlayerAreaProps {
   handOnly?: boolean;
   /** Desktop-size cards in the fan. */
   xlCards?: boolean;
+  /** Show the "ocultar cartas" privacy toggle above the hand (human only). */
+  hideable?: boolean;
 }
+
+const HIDE_KEY = 'fdp-hide-hand';
 
 const AVATAR_COLORS = ['#3a5a4a', '#5a3a3a', '#3a4a5a', '#4a5a3a', '#5a4a3a', '#4a3a5a', '#5a5a3a', '#3a5a5a'];
 
@@ -81,7 +86,20 @@ export function PlayerArea({
   selectedCardId,
   handOnly,
   xlCards,
+  hideable,
 }: PlayerAreaProps) {
+  // Privacy toggle: keep the hand hidden and only reveal while pressing/hovering.
+  // Off by default (cards stay face up); the choice persists between rounds.
+  const [hidden, setHidden] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem(HIDE_KEY) === '1'
+  );
+  const [peeking, setPeeking] = useState(false);
+  const toggleHidden = () =>
+    setHidden((v) => {
+      if (typeof window !== 'undefined') localStorage.setItem(HIDE_KEY, v ? '0' : '1');
+      return !v;
+    });
+
   const sortedHand = manilhaValue
     ? [...player.hand].sort((a, b) => getCardStrength(b, manilhaValue) - getCardStrength(a, manilhaValue))
     : [...player.hand];
@@ -152,9 +170,20 @@ export function PlayerArea({
   // Human player — fanned hand (+ info row unless composed externally)
   const cardSize: CardSize = xlCards ? 'xl' : 'lg';
   const overlap = handOverlap(sortedHand.length, !!xlCards);
+  // Privacy hide only applies to cards you'd otherwise see (rounds > 1).
+  const canHide = hideable && showCards;
+  const faceUp = showCards && (!canHide || !hidden || peeking);
+  const peekHandlers = canHide && hidden
+    ? {
+        onMouseEnter: () => setPeeking(true),
+        onMouseLeave: () => setPeeking(false),
+        onTouchStart: () => setPeeking(true),
+        onTouchEnd: () => setPeeking(false),
+      }
+    : {};
 
   const fan = !player.eliminated && (
-    <div className={`flex items-end justify-center pt-2.5 ${overlap}`}>
+    <div className={`flex items-end justify-center pt-2.5 ${overlap}`} {...peekHandlers}>
       {sortedHand.map((card, i) => {
         const selected = card.id === selectedCardId;
         return (
@@ -163,7 +192,7 @@ export function PlayerArea({
             className={`transition-transform duration-150 ${selected ? 'z-10' : ''}`}
             style={{ transform: fanTransform(i, sortedHand.length, selected) }}
           >
-            {showCards ? (
+            {faceUp ? (
               <CardComponent
                 card={card}
                 isManilha={card.value === manilhaValue}
@@ -186,17 +215,29 @@ export function PlayerArea({
     </div>
   );
 
+  const hideToggle = canHide && (
+    <button
+      onClick={toggleHidden}
+      className="text-[10.5px] tracking-[1px] px-2.5 py-1 rounded-full border border-white/12 text-cream/60 hover:text-cream hover:border-gold/50 transition-colors shrink-0"
+    >
+      {hidden ? 'MOSTRAR CARTAS' : 'OCULTAR CARTAS'}
+    </button>
+  );
+
   if (handOnly) return <div className={elim}>{fan}</div>;
 
   return (
     <div className={`flex flex-col items-center gap-2 w-full ${elim}`}>
-      <div className="flex justify-between items-center w-full px-1.5">
-        <span className="text-cream text-[13px] font-semibold">
+      <div className="flex justify-between items-center w-full px-1.5 gap-2">
+        <span className="text-cream text-[13px] font-semibold min-w-0 truncate">
           {player.name}
           {player.bid !== null && ` · tentos ${player.bid} · fez ${player.tricksWon}`}
           {isDealer && <span className="text-gold font-bold tracking-[1.5px] text-[10px]"> · CARTEIA</span>}
         </span>
-        <Dots points={player.points} />
+        <div className="flex items-center gap-2 shrink-0">
+          {hideToggle}
+          <Dots points={player.points} />
+        </div>
       </div>
       {fan}
     </div>
