@@ -629,18 +629,23 @@ export function useMultiplayer(
   const startGame = useCallback(() => {
     if (!isHost) return;
     // Online is humans only — start with everyone who joined the lobby (no bots).
-    // Lobby ids are contiguous (host = 0, guests join as 1,2,…), so they map
-    // straight onto the freshly dealt players.
     const lobby = lobbyPlayersRef.current;
     const count = lobby.length;
     if (count < 2) return;
+
+    // initGame numbers the seats 0..count-1, but lobby ids get gaps as soon as
+    // someone leaves or is kicked (guests keep the id they were welcomed with,
+    // e.g. [0, 2]). Remap the dealt game onto the real lobby ids, otherwise a
+    // guest would not find themselves in the state and could not play.
     const gs = initGame(count, count);
+    const seatId = (slot: number) => lobby[slot].id;
     const namedGs: GameState = {
       ...gs,
-      players: gs.players.map((p) => ({
-        ...p,
-        name: lobby.find((lp) => lp.id === p.id)?.name ?? p.name,
-      })),
+      players: gs.players.map((p, i) => ({ ...p, id: seatId(i), name: lobby[i].name })),
+      dealerPlayerId: seatId(gs.dealerPlayerId),
+      currentBidderId: seatId(gs.currentBidderId),
+      currentPlayerId: seatId(gs.currentPlayerId),
+      trickLeaderId: seatId(gs.trickLeaderId),
     };
     persistHostLobby();
     commitHostState(namedGs);

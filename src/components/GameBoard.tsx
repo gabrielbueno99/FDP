@@ -30,8 +30,11 @@ function getLandscapeSeats(n: number): Array<{ x: string; y: string } | null> {
     5: [null, [86, 52], [73, 12], [27, 12], [14, 52]],
     6: [null, [86, 52], [79, 12], [50, 10], [21, 12], [14, 52]],
     7: [null, [87, 58], [87, 26], [66, 10], [34, 10], [13, 26], [13, 58]],
+    8: [null, [88, 60], [88, 30], [72, 10], [50, 7], [28, 10], [12, 30], [12, 60]],
   };
-  return (cfg[Math.min(n, 7)] ?? cfg[4]).map(
+  // Solo allows up to 8 players — clamping at 7 would leave the last one
+  // with no seat and drop them from the table.
+  return (cfg[Math.min(n, 8)] ?? cfg[4]).map(
     (item) => (item ? { x: `${item[0]}%`, y: `${item[1]}%` } : null)
   );
 }
@@ -140,35 +143,53 @@ export function GameBoard({
         : null;
 
   if (phase === 'game-end') {
-    const others = players
-      .filter((p) => p.id !== winner?.id)
-      .sort((a, b) => b.points - a.points);
-    const humanWon = winner?.id === humanId;
+    // Survivors first (most lives on top), then whoever was knocked out.
+    const standings = [...players].sort((a, b) => {
+      if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
+      return b.points - a.points;
+    });
+    // Everyone on their last life can bust in the same round — then there is
+    // no survivor and the game ends without a winner.
+    const humanWon = !!winner && winner.id === humanId;
     return (
       <div className="min-h-screen lobby-bg flex flex-col items-center justify-center p-7">
         <div className="w-full max-w-sm flex flex-col items-center">
           <div className="flex gap-3.5 text-gold text-[15px] tracking-[6px]">♣ ♥ ♠ ♦</div>
           <div className="text-center mt-6 flex flex-col gap-2">
-            <span className="font-display italic text-gold text-lg">último de pé</span>
+            <span className="font-display italic text-gold text-lg">
+              {winner ? 'último de pé' : 'ninguém sobrou'}
+            </span>
             <span className="font-display text-cream text-5xl leading-none">
-              {humanWon ? 'Você venceu.' : `${winner?.name} venceu.`}
+              {!winner ? 'Empate.' : humanWon ? 'Você venceu.' : `${winner.name} venceu.`}
             </span>
             <span className="text-cream/60 text-sm">
-              {round} rodada{round > 1 ? 's' : ''} · {winner?.points} vida{(winner?.points ?? 0) > 1 ? 's' : ''} de sobra
+              {round} rodada{round > 1 ? 's' : ''}
+              {winner
+                ? ` · ${winner.points} vida${winner.points > 1 ? 's' : ''} de sobra`
+                : ' · todo mundo caiu junto'}
             </span>
           </div>
 
           <div className="w-full mt-9 flex flex-col gap-2">
-            <div className="flex justify-between items-center px-3.5 py-2.5 rounded-xl bg-white/[0.04] border border-gold/35">
-              <span className="text-cream text-[13.5px] font-semibold">1 · {winner?.name}</span>
-              <span className="text-gold text-[12.5px]">{winner?.points} vida{(winner?.points ?? 0) > 1 ? 's' : ''}</span>
-            </div>
-            {others.map((p, i) => (
-              <div key={p.id} className="flex justify-between items-center px-3.5 py-2.5 rounded-xl bg-white/[0.03]">
-                <span className="text-cream/70 text-[13.5px]">{i + 2} · {p.name}</span>
-                <span className="text-cream/45 text-[12.5px]">eliminado</span>
-              </div>
-            ))}
+            {standings.map((p, i) => {
+              const isWinner = !!winner && p.id === winner.id;
+              return (
+                <div
+                  key={p.id}
+                  className={`flex justify-between items-center px-3.5 py-2.5 rounded-xl ${
+                    isWinner ? 'bg-white/[0.04] border border-gold/35' : 'bg-white/[0.03]'
+                  }`}
+                >
+                  <span className={`text-[13.5px] ${isWinner ? 'text-cream font-semibold' : 'text-cream/70'}`}>
+                    {i + 1} · {p.name}
+                    {p.id === humanId && <span className="text-cream/40"> (você)</span>}
+                  </span>
+                  <span className={`text-[12.5px] ${isWinner ? 'text-gold' : 'text-cream/45'}`}>
+                    {p.eliminated ? 'eliminado' : `${p.points} vida${p.points > 1 ? 's' : ''}`}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           <button
