@@ -37,6 +37,14 @@ export function dealRound(state: GameState): GameState {
   const manilhaValue = getManilhaValue(vira.value);
   const remaining = deck.slice(1);
 
+  // slice() just returns short/empty hands if we ask for more cards than the
+  // deck holds, which would corrupt the round silently instead of failing.
+  if (active.length * state.round > remaining.length) {
+    throw new Error(
+      `Baralho insuficiente: ${active.length} jogadores × ${state.round} cartas > ${remaining.length} disponíveis`
+    );
+  }
+
   const newPlayers = state.players.map((p) => {
     if (p.eliminated) return { ...p, hand: [], bid: null, tricksWon: 0 };
     const activeIdx = active.findIndex((ap) => ap.id === p.id);
@@ -236,7 +244,17 @@ export function advanceToNextRound(state: GameState): GameState {
   });
 }
 
-export function initGame(playerCount: number, humanCount: number): GameState {
+// A round deals `round` cards to every active player out of the 51 left after
+// the vira, so no game can go past this many rounds without running dry.
+export function maxRoundsFor(playerCount: number): number {
+  return Math.max(1, Math.min(Math.floor(51 / playerCount), 10));
+}
+
+export function initGame(
+  playerCount: number,
+  humanCount: number,
+  roundLimit?: number
+): GameState {
   const botNames = ['João', 'Maria', 'Pedro', 'Ana', 'Carlos', 'Júlia', 'Lucas'];
   const players: Player[] = Array.from({ length: playerCount }, (_, i) => ({
     id: i,
@@ -249,7 +267,11 @@ export function initGame(playerCount: number, humanCount: number): GameState {
     eliminated: false,
   }));
 
-  const maxRounds = Math.min(Math.floor(51 / playerCount), 10);
+  // The host can shorten the match, but never past what the deck can deal.
+  const deckLimit = maxRoundsFor(playerCount);
+  const maxRounds = roundLimit
+    ? Math.max(1, Math.min(roundLimit, deckLimit))
+    : deckLimit;
   const dealerPlayerId = Math.floor(Math.random() * playerCount);
 
   return dealRound({

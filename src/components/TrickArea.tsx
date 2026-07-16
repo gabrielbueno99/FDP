@@ -5,13 +5,14 @@ import { CardComponent } from './CardComponent';
 
 interface TrickAreaProps {
   state: GameState;
-  /** Vira lives in the top bar on desktop — hide it here. */
   showVira?: boolean;
   /** Turn status shown below the played cards ("sua vez — Bia leva por enquanto"). */
   status?: string | null;
+  /** Desktop felt is huge — bigger cards and more breathing room. */
+  bigCards?: boolean;
 }
 
-export function TrickArea({ state, showVira = true, status }: TrickAreaProps) {
+export function TrickArea({ state, showVira = true, status, bigCards }: TrickAreaProps) {
   const { currentTrick, vira, manilhaValue, trickWinnerId, players, phase } = state;
 
   const leadingCardId = currentTrick.length > 0 && manilhaValue
@@ -27,10 +28,12 @@ export function TrickArea({ state, showVira = true, status }: TrickAreaProps) {
   return (
     <div className="flex flex-col items-center gap-3.5 w-full py-2">
       {showVira && vira && (
-        <div className="flex items-center gap-2.5">
-          <span className="text-cream/50 text-[11px] tracking-[2px]">VIRA</span>
-          <CardComponent card={vira} size="sm" />
-          <span className="text-gold text-xs font-semibold">manilha {manilhaValue}</span>
+        <div className={`flex items-center ${bigCards ? 'gap-4' : 'gap-2.5'}`}>
+          <span className={`text-cream/50 tracking-[2px] ${bigCards ? 'text-xs' : 'text-[11px]'}`}>VIRA</span>
+          <CardComponent card={vira} size={bigCards ? 'md' : 'sm'} />
+          <span className={`text-gold font-semibold ${bigCards ? 'text-base' : 'text-xs'}`}>
+            manilha {manilhaValue}
+          </span>
         </div>
       )}
 
@@ -46,11 +49,22 @@ export function TrickArea({ state, showVira = true, status }: TrickAreaProps) {
             return (
               <div
                 key={card.id}
-                className={`flex flex-col items-center gap-1.5 ${i > 0 ? '-ml-4' : ''} ${isLeading ? 'z-10' : ''}`}
+                className={`flex flex-col items-center gap-1.5 ${
+                  i > 0 ? (bigCards ? 'ml-1.5' : '-ml-4') : ''
+                } ${isLeading ? 'z-10' : ''}`}
                 style={{ transform: `rotate(${isLeading ? 0 : angle}deg) translateY(${lift}px)` }}
               >
-                <CardComponent card={card} isManilha={isManilha} isWinning={isLeading} size="md" />
-                <span className={`text-[11px] font-semibold ${isLeading ? 'text-gold' : 'text-cream/60'}`}>
+                <CardComponent
+                  card={card}
+                  isManilha={isManilha}
+                  isWinning={isLeading}
+                  size={bigCards ? 'lg' : 'md'}
+                />
+                <span
+                  className={`font-semibold ${bigCards ? 'text-[13px]' : 'text-[11px]'} ${
+                    isLeading ? 'text-gold' : 'text-cream/60'
+                  }`}
+                >
                   {player?.name}
                   {isLeading && isManilha && ' · manilha'}
                 </span>

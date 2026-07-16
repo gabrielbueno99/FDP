@@ -56,8 +56,8 @@ export function useGame(options: UseGameOptions = {}) {
     [externalState]
   );
 
-  const startGame = useCallback((playerCount: number, humanCount = 1) => {
-    setInternalState(initGame(playerCount, humanCount));
+  const startGame = useCallback((playerCount: number, humanCount = 1, roundLimit?: number) => {
+    setInternalState(initGame(playerCount, humanCount, roundLimit));
   }, []);
 
   const humanId = myPlayerId ?? state.players.find((p) => p.isHuman)?.id ?? 0;

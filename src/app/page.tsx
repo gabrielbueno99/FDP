@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGame } from '../hooks/useGame';
+import { maxRoundsFor } from '../lib/game';
 import { GameBoard } from '../components/GameBoard';
 
 function JoinByCode() {
@@ -40,13 +41,19 @@ type Screen = 'home' | 'playing';
 export default function Home() {
   const [screen, setScreen] = useState<Screen>('home');
   const [playerCount, setPlayerCount] = useState(4);
+  const [roundLimit, setRoundLimit] = useState<number | null>(null);
   const router = useRouter();
 
   const { state, startGame, placeBid, playCard, nextRound, restart, forbiddenBid, isMyTurn, humanId } =
     useGame();
 
+  // The deck caps how long a match can run; offer only what actually fits.
+  const deckLimit = maxRoundsFor(playerCount);
+  const roundOptions = [3, 5, 8, 10].filter((n) => n < deckLimit);
+  const effectiveLimit = roundLimit && roundLimit < deckLimit ? roundLimit : deckLimit;
+
   const handleStartSolo = () => {
-    startGame(playerCount, 1);
+    startGame(playerCount, 1, effectiveLimit);
     setScreen('playing');
   };
 
@@ -105,6 +112,42 @@ export default function Home() {
                 {n}
               </button>
             ))}
+          </div>
+
+          <div className="flex flex-col gap-2 pt-1">
+            <div className="flex justify-between items-baseline">
+              <span className="text-cream/55 text-[11px] tracking-[2px]">RODADAS</span>
+              <span className="text-cream/45 text-[12px]">
+                {effectiveLimit} rodada{effectiveLimit > 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="flex gap-2 justify-center flex-wrap">
+              {roundOptions.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setRoundLimit(n)}
+                  className={[
+                    'h-9 px-3.5 rounded-[10px] text-[13.5px] transition-all',
+                    roundLimit === n
+                      ? 'bg-gold text-ink font-bold'
+                      : 'border border-gold/30 text-cream/60 hover:border-gold/60 hover:text-cream',
+                  ].join(' ')}
+                >
+                  {n}
+                </button>
+              ))}
+              <button
+                onClick={() => setRoundLimit(null)}
+                className={[
+                  'h-9 px-3.5 rounded-[10px] text-[13.5px] transition-all',
+                  roundLimit === null
+                    ? 'bg-gold text-ink font-bold'
+                    : 'border border-gold/30 text-cream/60 hover:border-gold/60 hover:text-cream',
+                ].join(' ')}
+              >
+                Tudo ({deckLimit})
+              </button>
+            </div>
           </div>
 
           <button

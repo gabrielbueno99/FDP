@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import { GameState } from '../lib/types';
 import { SUIT_SYMBOLS, getCardStrength } from '../lib/deck';
-import { CardComponent } from './CardComponent';
 import { Dots, PlayerArea } from './PlayerArea';
 import { TrickArea } from './TrickArea';
 import { BidPanel } from './BidPanel';
@@ -53,7 +52,7 @@ export function GameBoard({
   const {
     phase, players, round,
     dealerPlayerId, currentBidderId, currentPlayerId,
-    trickWinnerId, manilhaValue, winner, trickLeaderId, vira,
+    trickWinnerId, manilhaValue, winner, trickLeaderId, roundResults,
   } = state;
 
   const [isLandscape, setIsLandscape] = useState(false);
@@ -149,8 +148,18 @@ export function GameBoard({
       return b.points - a.points;
     });
     // Everyone on their last life can bust in the same round — then there is
-    // no survivor and the game ends without a winner.
+    // no survivor and the game ends without a winner. The tie is between the
+    // players who went out together in that final round.
     const humanWon = !!winner && winner.id === humanId;
+    const tied = winner
+      ? []
+      : (roundResults.filter((r) => r.newlyEliminated).map((r) => r.name).length > 0
+          ? roundResults.filter((r) => r.newlyEliminated).map((r) => r.name)
+          : players.map((p) => p.name));
+    const tiedLabel =
+      tied.length > 1
+        ? `${tied.slice(0, -1).join(', ')} e ${tied[tied.length - 1]}`
+        : tied[0] ?? '';
     return (
       <div className="min-h-screen lobby-bg flex flex-col items-center justify-center p-7">
         <div className="w-full max-w-sm flex flex-col items-center">
@@ -162,6 +171,11 @@ export function GameBoard({
             <span className="font-display text-cream text-5xl leading-none">
               {!winner ? 'Empate.' : humanWon ? 'Você venceu.' : `${winner.name} venceu.`}
             </span>
+            {!winner && tiedLabel && (
+              <span className="text-cream/80 text-base leading-snug">
+                Empate entre os jogadores: <span className="text-gold">{tiedLabel}</span>
+              </span>
+            )}
             <span className="text-cream/60 text-sm">
               {round} rodada{round > 1 ? 's' : ''}
               {winner
@@ -284,24 +298,20 @@ export function GameBoard({
           <div className="flex items-center gap-5">
             <span className="text-cream/60 text-[13px] tracking-[2px]">{roundLabel}</span>
             {tentoPill}
-            {vira && (
-              <div className="flex items-center gap-2.5 px-3.5 py-1.5 border border-gold/30 rounded-full">
-                <span className="text-cream/50 text-[11px] tracking-[2px]">VIRA</span>
-                <CardComponent card={vira} size="sm" />
-                <span className="text-gold text-[13px] font-semibold">manilha {manilhaValue}</span>
-              </div>
-            )}
           </div>
         </div>
 
         {/* Table zone */}
         <div className="flex-1 relative min-h-0">
-          {/* Oval felt */}
-          <div className="absolute rounded-[50%] table-rail" style={{ left: '20%', right: '20%', top: '4%', bottom: '26%' }}>
+          {/* Oval felt — reaches out to the seats so every pod sits on the rim
+              instead of floating in the dark. */}
+          <div className="absolute rounded-[50%] table-rail" style={{ left: '13%', right: '13%', top: '4%', bottom: '26%' }}>
             <div className="absolute inset-[10px] rounded-[50%] felt-center overflow-hidden">
               <div className="absolute inset-[8%] rounded-[50%] border border-gold/20 pointer-events-none" />
               <div className="absolute inset-0 flex items-center justify-center">
-                <TrickArea state={state} showVira={false} status={status} />
+                {/* Vira lives on the felt (like mobile) — in the top bar it was
+                    a pill nobody could read. */}
+                <TrickArea state={state} status={status} bigCards />
               </div>
             </div>
           </div>

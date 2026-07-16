@@ -3,6 +3,7 @@ import { use, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMultiplayer } from '../../../hooks/useMultiplayer';
 import { useGame } from '../../../hooks/useGame';
+import { maxRoundsFor } from '../../../lib/game';
 import { GameBoard } from '../../../components/GameBoard';
 import { DisconnectOverlay } from '../../../components/DisconnectOverlay';
 import { ChatPanel } from '../../../components/ChatPanel';
@@ -17,6 +18,14 @@ interface ChatWidgetProps {
   messages: ChatMessage[];
   myPlayerId: number | null;
   onSend: (text: string) => void;
+}
+
+function ChatIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
 }
 
 function ChatWidget({ messages, myPlayerId, onSend }: ChatWidgetProps) {
@@ -52,9 +61,9 @@ function ChatWidget({ messages, myPlayerId, onSend }: ChatWidgetProps) {
 
       <button
         onClick={() => { setOpen((v) => !v); setUnread(0); }}
-        className="relative w-11 h-11 rounded-full border border-gold/40 bg-black/50 hover:border-gold active:scale-95 flex items-center justify-center shadow-xl transition-all"
+        className="relative w-11 h-11 rounded-full border border-gold/40 bg-black/50 hover:border-gold active:scale-95 flex items-center justify-center shadow-xl transition-all text-gold"
       >
-        <span className="text-gold text-lg leading-none">{open ? '×' : '💬'}</span>
+        {open ? <span className="text-lg leading-none">×</span> : <ChatIcon />}
         {!open && unread > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-0.5 bg-gold text-ink text-[9px] font-black rounded-full flex items-center justify-center shadow">
             {unread > 9 ? '9+' : unread}
@@ -130,6 +139,7 @@ export default function SalaPage({ params }: PageProps) {
 
   const [nameInput, setNameInput] = useState<string | null>(playerName);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [roundLimit, setRoundLimit] = useState<number | null>(null);
   const [showPlayers, setShowPlayers] = useState(false);
 
   const isHost = typeof window !== 'undefined' && sessionStorage.getItem('fdp-host-room') === roomCode;
@@ -307,6 +317,10 @@ export default function SalaPage({ params }: PageProps) {
   // Lobby
   const roomUrl = typeof window !== 'undefined' ? `${window.location.origin}/sala/${roomCode}` : '';
   const canStart = mp.lobbyPlayers.length >= 2;
+  // The deck caps the match length; only offer limits that actually fit.
+  const deckLimit = maxRoundsFor(Math.max(2, mp.lobbyPlayers.length));
+  const roundOptions = [3, 5, 8, 10].filter((n) => n < deckLimit);
+  const effectiveLimit = roundLimit && roundLimit < deckLimit ? roundLimit : deckLimit;
 
   return (
     <>
@@ -391,8 +405,44 @@ export default function SalaPage({ params }: PageProps) {
           <div className="mt-7 flex flex-col gap-3">
             {mp.role === 'host' && (
               <>
+                <div className="flex flex-col gap-2">
+                  <div className="flex justify-between items-baseline px-1">
+                    <span className="text-cream/55 text-[11px] tracking-[2px]">RODADAS</span>
+                    <span className="text-cream/45 text-xs">
+                      {effectiveLimit} rodada{effectiveLimit > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 justify-center flex-wrap">
+                    {roundOptions.map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setRoundLimit(n)}
+                        className={[
+                          'h-9 px-3.5 rounded-[10px] text-[13.5px] transition-all',
+                          roundLimit === n
+                            ? 'bg-gold text-ink font-bold'
+                            : 'border border-gold/30 text-cream/60 hover:border-gold/60 hover:text-cream',
+                        ].join(' ')}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setRoundLimit(null)}
+                      className={[
+                        'h-9 px-3.5 rounded-[10px] text-[13.5px] transition-all',
+                        roundLimit === null
+                          ? 'bg-gold text-ink font-bold'
+                          : 'border border-gold/30 text-cream/60 hover:border-gold/60 hover:text-cream',
+                      ].join(' ')}
+                    >
+                      Tudo ({deckLimit})
+                    </button>
+                  </div>
+                </div>
+
                 <button
-                  onClick={() => mp.startGame()}
+                  onClick={() => mp.startGame(effectiveLimit)}
                   disabled={!canStart}
                   className="btn-gold h-13 rounded-xl font-bold text-base transition-all hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                 >

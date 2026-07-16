@@ -37,7 +37,7 @@ interface UseMultiplayerReturn {
   chatMessages: ChatMessage[];
   sendAction: (action: PlayerAction) => void;
   sendChat: (text: string) => void;
-  startGame: () => void;
+  startGame: (roundLimit?: number) => void;
   removeDisconnectedPlayer: () => void;
   kickPlayer: (playerId: number) => void;
   leaveLobby: () => void;
@@ -626,7 +626,7 @@ export function useMultiplayer(
     }
   }, [isHost, applyHostAction, send]);
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback((roundLimit?: number) => {
     if (!isHost) return;
     // Online is humans only — start with everyone who joined the lobby (no bots).
     const lobby = lobbyPlayersRef.current;
@@ -637,7 +637,7 @@ export function useMultiplayer(
     // someone leaves or is kicked (guests keep the id they were welcomed with,
     // e.g. [0, 2]). Remap the dealt game onto the real lobby ids, otherwise a
     // guest would not find themselves in the state and could not play.
-    const gs = initGame(count, count);
+    const gs = initGame(count, count, roundLimit);
     const seatId = (slot: number) => lobby[slot].id;
     const namedGs: GameState = {
       ...gs,
