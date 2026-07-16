@@ -6,6 +6,7 @@ import {
   advanceToNextRound,
   applyBid,
   applyCardPlay,
+  dealRound,
   getActivePlayers,
   initGame,
   isLastBidder,
@@ -50,6 +51,12 @@ interface UseMultiplayerReturn {
   joinRejected: boolean;
   /** Guest: approved, but only deals in from the next round. */
   seatedNextRound: boolean;
+  /** Whether *this* client is currently running the table (can change mid-game). */
+  isHost: boolean;
+  /** Player id of the current host, so everyone agrees who is in charge. */
+  hostId: number;
+  /** Set when this client was promoted to host after the old one dropped. */
+  becameHost: boolean;
   sendAction: (action: PlayerAction) => void;
   sendChat: (text: string) => void;
   startGame: (roundLimit?: number) => void;
@@ -96,8 +103,19 @@ function redactStateFor(gs: GameState, targetId: number): GameState {
 export function useMultiplayer(
   roomCode: string,
   playerName: string | null,
-  isHost: boolean
+  initialIsHost: boolean
 ): UseMultiplayerReturn {
+  // Who runs the table can change mid-game: if the host walks out, the next
+  // player by join order takes over. Handlers read the refs so a promotion
+  // never has to tear the channel down and rebuild it.
+  const [isHost, setIsHost] = useState(initialIsHost);
+  const isHostRef = useRef(initialIsHost);
+  const [hostId, setHostId] = useState(0);
+  const hostIdRef = useRef(0);
+  const [becameHost, setBecameHost] = useState(false);
+  useEffect(() => { isHostRef.current = isHost; }, [isHost]);
+  useEffect(() => { hostIdRef.current = hostId; }, [hostId]);
+
   const pidKey = `fdp-pid-${roomCode}`;
   const hostStateKey = `fdp-host-state-${roomCode}`;
   const hostLobbyKey = `fdp-host-lobby-${roomCode}`;
@@ -176,6 +194,12 @@ export function useMultiplayer(
   const pendingSeatsRef = useRef<{ id: number; name: string }[]>([]);
   // Guest: don't time out the join while the host is still deciding
   const awaitingApprovalRef = useRef(false);
+  // Host migration: latest state we saw (guests only ever hold a redacted one)
+  const gameStateRef = useRef<GameState | null>(restoredHost.game);
+  const maybePromoteSelfRef = useRef<(goneHostId: number) => void>(() => {});
+  const promotionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { gameStateRef.current = gameState; }, [gameState]);
 
   useEffect(() => { pendingJoinsRef.current = pendingJoins; }, [pendingJoins]);
   useEffect(() => { awaitingApprovalRef.current = awaitingApproval; }, [awaitingApproval]);
@@ -192,7 +216,7 @@ export function useMultiplayer(
   // Host → guests: one redacted copy of the state per guest, never the full state.
   const broadcastState = useCallback((gs: GameState) => {
     for (const lp of lobbyPlayersRef.current) {
-      if (lp.id === 0) continue;
+      if (lp.id === hostIdRef.current) continue;
       send('game_state', { state: redactStateFor(gs, lp.id), target: lp.id });
     }
   }, [send]);
@@ -340,6 +364,76 @@ export function useMultiplayer(
 
   useEffect(() => { scheduleBotRef.current = scheduleBot; }, [scheduleBot]);
 
+  /**
+   * The host walked out. Whoever joined earliest among the players still
+   * connected takes the table over.
+   *
+   * A guest only ever holds a redacted state — it never saw the other hands —
+   * so the round in progress cannot be resumed. It is re-dealt instead, keeping
+   * lives, scores, round number and dealer. That is the price of never shipping
+   * anyone else's cards to a client.
+   */
+  const maybePromoteSelf = useCallback((goneHostId: number) => {
+    if (isHostRef.current) return;
+    const myId = myPlayerIdRef.current;
+    if (myId === null) return;
+
+    // Who is still here, by join order (lowest id joined first)?
+    const present = new Set<number>();
+    const presence = channelRef.current?.presenceState() ?? {};
+    for (const metas of Object.values(presence)) {
+      for (const m of metas as unknown as { playerId?: number }[]) {
+        if (typeof m.playerId === 'number') present.add(m.playerId);
+      }
+    }
+    present.delete(goneHostId);
+    if (!present.size) return;
+
+    const successor = Math.min(...present);
+    if (successor !== myId) return;
+
+    isHostRef.current = true;
+    setIsHost(true);
+    setBecameHost(true);
+    hostIdRef.current = myId;
+    setHostId(myId);
+    try { sessionStorage.setItem('fdp-host-room', roomCode); } catch { /* best-effort */ }
+
+    // Take the lobby from what we already know, minus the host who left.
+    const lobby = lobbyPlayersRef.current.filter((lp) => lp.id !== goneHostId);
+    lobbyPlayersRef.current = lobby;
+    setLobbyPlayers(lobby);
+    nextPlayerIdRef.current = Math.max(nextPlayerIdRef.current, ...lobby.map((l) => l.id + 1), 1);
+
+    send('host_changed', { hostId: myId, name: playerName });
+
+    const gs = gameStateRef.current;
+    if (gs && gs.phase !== 'game-end' && gs.phase !== 'setup') {
+      const players = gs.players.map((p) =>
+        p.id === goneHostId ? { ...p, eliminated: true, hand: [] } : p
+      );
+      const remaining = getActivePlayers(players);
+      if (remaining.length <= 1) {
+        const winner = remaining[0] ?? null;
+        commitHostState({ ...gs, players, phase: 'game-end', winner });
+      } else {
+        // Fresh deal for the round we were on — nobody here knows the old hands.
+        commitHostState(dealRound({
+          ...gs,
+          players,
+          currentTrick: [],
+          roundResults: [],
+          trickWinnerId: null,
+          winner: null,
+        }));
+      }
+    }
+    broadcastLobby(lobby);
+    persistHostLobby();
+  }, [roomCode, playerName, send, broadcastLobby, commitHostState, persistHostLobby]);
+
+  useEffect(() => { maybePromoteSelfRef.current = maybePromoteSelf; }, [maybePromoteSelf]);
+
   useEffect(() => {
     if (!playerName) return;
 
@@ -365,7 +459,7 @@ export function useMultiplayer(
       channel
         // ── Game messages ──────────────────────────────────────────────
         .on('broadcast', { event: 'join' }, ({ payload }) => {
-          if (!isHost) return;
+          if (!isHostRef.current) return;
           const { clientId: joinerId, name } = payload as { clientId: string; name: string };
 
           // If this clientId already has a player, just resend welcome + state
@@ -436,20 +530,20 @@ export function useMultiplayer(
           if (hostGameRef.current) broadcastState(hostGameRef.current);
         })
         .on('broadcast', { event: 'join_pending' }, ({ payload }) => {
-          if (isHost) return;
+          if (isHostRef.current) return;
           if ((payload as { clientId: string }).clientId === clientIdRef.current) {
             setAwaitingApproval(true);
           }
         })
         .on('broadcast', { event: 'join_rejected' }, ({ payload }) => {
-          if (isHost) return;
+          if (isHostRef.current) return;
           if ((payload as { clientId: string }).clientId === clientIdRef.current) {
             setAwaitingApproval(false);
             setJoinRejected(true);
           }
         })
         .on('broadcast', { event: 'welcome' }, ({ payload }) => {
-          if (isHost) return;
+          if (isHostRef.current) return;
           const { clientId: targetClient, playerId } = payload as { clientId: string; playerId: number };
           if (targetClient === clientIdRef.current) {
             myPlayerIdRef.current = playerId;
@@ -462,7 +556,7 @@ export function useMultiplayer(
           }
         })
         .on('broadcast', { event: 'lobby' }, ({ payload }) => {
-          if (isHost) return;
+          if (isHostRef.current) return;
           const { players, seq } = payload as { players: LobbyPlayer[]; seq?: number };
           // Ignore stale out-of-order lobby broadcasts
           if (seq !== undefined && seq <= lastLobbySeqRef.current) return;
@@ -470,20 +564,20 @@ export function useMultiplayer(
           setLobbyPlayers(players);
         })
         .on('broadcast', { event: 'game_state' }, ({ payload }) => {
-          if (isHost) return;
+          if (isHostRef.current) return;
           const { state, target } = payload as { state: GameState; target?: number };
           // States are per-player; only apply the copy addressed to us
           if (target !== undefined && target !== myPlayerIdRef.current) return;
           setGameState(state);
         })
         .on('broadcast', { event: 'action' }, ({ payload }) => {
-          if (!isHost) return;
+          if (!isHostRef.current) return;
           const { action, fromPlayerId } = payload as { action: PlayerAction; fromPlayerId: number };
           applyHostAction(action, fromPlayerId);
         })
         // Guest requests current state after reconnecting — also proof of life
         .on('broadcast', { event: 'request_state' }, ({ payload }) => {
-          if (!isHost) return;
+          if (!isHostRef.current) return;
           const { playerId } = (payload ?? {}) as { playerId?: number };
           if (playerId !== undefined) {
             cancelDisconnectTimer(playerId);
@@ -498,12 +592,12 @@ export function useMultiplayer(
         })
         // ── Kick / voluntary leave ──────────────────────────────────────
         .on('broadcast', { event: 'kicked' }, ({ payload }) => {
-          if (isHost) return;
+          if (isHostRef.current) return;
           const { targetId } = payload as { targetId: number };
           if (targetId === myPlayerIdRef.current) setWasKicked(true);
         })
         .on('broadcast', { event: 'leave_lobby' }, ({ payload }) => {
-          if (!isHost) return;
+          if (!isHostRef.current) return;
           const { playerId } = payload as { playerId: number };
           const updated = lobbyPlayersRef.current.filter((p) => p.id !== playerId);
           if (updated.length === lobbyPlayersRef.current.length) return;
@@ -515,12 +609,12 @@ export function useMultiplayer(
         })
         // ── Disconnect events (broadcast so all players see the pause) ──
         .on('broadcast', { event: 'player_disconnected' }, ({ payload }) => {
-          if (isHost) return;
+          if (isHostRef.current) return;
           const { playerId, name } = payload as { playerId: number; name: string };
           setDisconnectedPlayer({ id: playerId, name });
         })
         .on('broadcast', { event: 'player_reconnected' }, () => {
-          if (isHost) return;
+          if (isHostRef.current) return;
           setDisconnectedPlayer(null);
         })
         // ── Presence: detect crashes / unexpected disconnects ───────────
@@ -528,20 +622,23 @@ export function useMultiplayer(
           for (const p of leftPresences) {
             const { playerId, name } = p as unknown as { playerId: number; name: string };
 
-            // Guests watch the host's presence so a dead host isn't a silent freeze
-            if (!isHost) {
-              if (playerId === 0) {
-                cancelDisconnectTimer(0);
+            // Guests watch the host's presence: if the table loses its owner,
+            // the next player by join order takes over instead of everyone
+            // staring at a frozen board.
+            if (!isHostRef.current) {
+              if (playerId === hostIdRef.current) {
+                cancelDisconnectTimer(playerId);
                 const t = setTimeout(() => {
-                  disconnectTimersRef.current.delete(0);
-                  setDisconnectedPlayer({ id: 0, name: name ?? 'Host' });
+                  disconnectTimersRef.current.delete(playerId);
+                  setDisconnectedPlayer({ id: playerId, name: name ?? 'Host' });
+                  maybePromoteSelfRef.current(playerId);
                 }, DISCONNECT_GRACE_MS);
-                disconnectTimersRef.current.set(0, t);
+                disconnectTimersRef.current.set(playerId, t);
               }
               continue;
             }
 
-            if (playerId === 0) continue;
+            if (playerId === hostIdRef.current) continue;
 
             const gs = hostGameRef.current;
             // No game yet → they left the lobby; drop them from the seat list.
@@ -579,12 +676,32 @@ export function useMultiplayer(
             const { playerId } = p as unknown as { playerId: number };
             if (playerId === undefined) continue;
             cancelDisconnectTimer(playerId);
-            if (!isHost && playerId === 0 && disconnectedPlayerRef.current?.id === 0) {
+            if (
+              !isHostRef.current &&
+              playerId === hostIdRef.current &&
+              disconnectedPlayerRef.current?.id === hostIdRef.current
+            ) {
               setDisconnectedPlayer(null);
               // Host is back — ask for the current state
               send('request_state', { playerId: myPlayerIdRef.current });
             }
-            if (isHost) clearDisconnected(playerId);
+            if (isHostRef.current) clearDisconnected(playerId);
+          }
+        })
+        // A new host announced itself — everyone follows, and the old host
+        // (if it ever comes back) stops thinking it still owns the table.
+        .on('broadcast', { event: 'host_changed' }, ({ payload }) => {
+          const { hostId: newHostId } = payload as { hostId: number };
+          if (promotionTimerRef.current) clearTimeout(promotionTimerRef.current);
+          hostIdRef.current = newHostId;
+          setHostId(newHostId);
+          cancelDisconnectTimer(newHostId);
+          setDisconnectedPlayer(null);
+          disconnectedPlayerRef.current = null;
+          if (newHostId !== myPlayerIdRef.current && isHostRef.current) {
+            isHostRef.current = false;
+            setIsHost(false);
+            try { sessionStorage.removeItem('fdp-host-room'); } catch { /* best-effort */ }
           }
         })
         .subscribe((status) => {
@@ -686,8 +803,12 @@ export function useMultiplayer(
       if (channelRef.current) supabase.removeChannel(channelRef.current);
       channelRef.current = null;
     };
+    // `isHost` is deliberately not a dependency: handlers read isHostRef, so a
+    // mid-game promotion flips behaviour without tearing the channel down and
+    // rebuilding it (which would drop presence and the promotion broadcast).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    roomCode, playerName, isHost, pidKey, send, broadcastState, broadcastLobby,
+    roomCode, playerName, pidKey, send, broadcastState, broadcastLobby,
     applyHostAction, cancelDisconnectTimer, clearDisconnected, persistHostLobby,
   ]);
 
@@ -705,7 +826,7 @@ export function useMultiplayer(
 
   const sendAction = useCallback((action: PlayerAction) => {
     if (isHost) {
-      applyHostAction(action, 0);
+      applyHostAction(action, myPlayerIdRef.current ?? 0);
     } else {
       send('action', { action, fromPlayerId: myPlayerIdRef.current ?? 0 });
     }
@@ -784,7 +905,7 @@ export function useMultiplayer(
   // Host removes a player on purpose (lobby or mid-game). Notifies the target,
   // drops them from the seat list, and folds their game slot if a game is on.
   const kickPlayer = useCallback((playerId: number) => {
-    if (!isHost || playerId === 0) return;
+    if (!isHost || playerId === hostIdRef.current) return;
     send('kicked', { targetId: playerId });
     cancelDisconnectTimer(playerId);
 
@@ -885,6 +1006,9 @@ export function useMultiplayer(
     pendingJoins,
     awaitingApproval,
     joinRejected,
+    isHost,
+    hostId,
+    becameHost,
     // Approved mid-game: we hold a seat but the deal only reaches us next round.
     seatedNextRound:
       myPlayerId !== null &&

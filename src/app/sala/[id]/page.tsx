@@ -142,9 +142,12 @@ export default function SalaPage({ params }: PageProps) {
   const [roundLimit, setRoundLimit] = useState<number | null>(null);
   const [showPlayers, setShowPlayers] = useState(false);
 
-  const isHost = typeof window !== 'undefined' && sessionStorage.getItem('fdp-host-room') === roomCode;
+  const initialIsHost =
+    typeof window !== 'undefined' && sessionStorage.getItem('fdp-host-room') === roomCode;
 
-  const mp = useMultiplayer(roomCode, nameInput, isHost);
+  const mp = useMultiplayer(roomCode, nameInput, initialIsHost);
+  // Live flag: the host can change mid-game if the original one walks out.
+  const isHost = mp.isHost;
 
   useEffect(() => {
     if (mp.wasKicked) router.push('/');
@@ -290,6 +293,15 @@ export default function SalaPage({ params }: PageProps) {
           </div>
         )}
 
+        {/* The old host walked out and this client took the table over */}
+        {mp.becameHost && (
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-black/85 border border-gold/50 rounded-full px-4 py-2 shadow-xl backdrop-blur-md">
+            <span className="font-display italic text-gold text-sm">
+              o anfitrião saiu — você assumiu a mesa, a rodada foi redistribuída
+            </span>
+          </div>
+        )}
+
         {/* Approved mid-game — no hand until the next deal */}
         {mp.seatedNextRound && (
           <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-black/85 border border-gold/40 rounded-full px-4 py-2 shadow-xl backdrop-blur-md">
@@ -312,7 +324,7 @@ export default function SalaPage({ params }: PageProps) {
           {isHost && showPlayers && (
             <div className="w-60 bg-black/80 border border-white/10 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-md p-3 flex flex-col gap-2">
               <span className="text-gold font-bold text-[10.5px] tracking-[1.5px] px-1">JOGADORES</span>
-              {activePlayers.filter(p => p.id !== 0).map(p => (
+              {activePlayers.filter(p => p.id !== mp.hostId).map(p => (
                 <div key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-white/[0.04]">
                   <div
                     className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0"
@@ -436,7 +448,7 @@ export default function SalaPage({ params }: PageProps) {
                 <div
                   className="w-[38px] h-[38px] rounded-full flex items-center justify-center font-bold text-[13px]"
                   style={
-                    p.id === 0
+                    p.id === mp.hostId
                       ? { background: '#c9a55a', color: '#0b1f18' }
                       : { background: avatarColor(p.id), color: '#ead9ac' }
                   }
@@ -445,12 +457,12 @@ export default function SalaPage({ params }: PageProps) {
                 </div>
                 <div className="flex flex-col gap-px flex-1">
                   <span className="text-cream font-semibold text-sm">{p.name}</span>
-                  <span className={p.id === 0 ? 'text-cream/55 text-xs' : 'text-ok text-xs'}>
-                    {p.id === 0 ? 'anfitrião' : 'pronto'}
+                  <span className={p.id === mp.hostId ? 'text-cream/55 text-xs' : 'text-ok text-xs'}>
+                    {p.id === mp.hostId ? 'anfitrião' : 'pronto'}
                   </span>
                 </div>
                 {p.id === mp.myPlayerId && <span className="text-gold text-base">♠</span>}
-                {isHost && p.id !== 0 && (
+                {isHost && p.id !== mp.hostId && (
                   <button
                     onClick={() => mp.kickPlayer(p.id)}
                     className="text-danger/50 hover:text-danger text-sm px-1.5 py-0.5 rounded transition-colors"
