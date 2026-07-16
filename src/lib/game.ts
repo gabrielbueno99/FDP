@@ -226,6 +226,52 @@ function resolveRoundEnd(
   };
 }
 
+/**
+ * Seats latecomers the host approved. They only ever enter between rounds, so
+ * the caller must run this before dealing the next one.
+ *
+ * A newcomer starts with the same lives as the current leader (never more), so
+ * joining late is neither a free win nor a handicap. Newcomers are dropped if
+ * the deck could not deal the next round to the bigger table.
+ */
+export function seatNewcomers(
+  state: GameState,
+  newcomers: { id: number; name: string }[]
+): GameState {
+  if (!newcomers.length) return state;
+
+  const active = getActivePlayers(state.players);
+  const nextRound = state.round + 1;
+  const fits = (extra: number) => (active.length + extra) * nextRound <= 51;
+
+  const admitted = newcomers.filter((_, i) => fits(i + 1));
+  if (!admitted.length) return state;
+
+  const leaderPoints = active.length ? Math.max(...active.map((p) => p.points)) : 5;
+  const players: Player[] = [
+    ...state.players,
+    ...admitted.map((n) => ({
+      id: n.id,
+      name: n.name,
+      isHuman: true,
+      points: Math.min(5, leaderPoints),
+      hand: [],
+      bid: null,
+      tricksWon: 0,
+      eliminated: false,
+    })),
+  ];
+
+  // A bigger table burns more cards per round — never promise more rounds
+  // than the deck can still deal.
+  const maxRounds = Math.min(
+    state.maxRounds,
+    maxRoundsFor(getActivePlayers(players).length)
+  );
+
+  return { ...state, players, maxRounds };
+}
+
 export function advanceToNextRound(state: GameState): GameState {
   const active = getActivePlayers(state.players);
 

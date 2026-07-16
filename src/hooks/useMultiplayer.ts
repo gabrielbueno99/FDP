@@ -9,6 +9,7 @@ import {
   getActivePlayers,
   initGame,
   isLastBidder,
+  seatNewcomers,
   startNextTrick,
 } from '../lib/game';
 import { getAIBid, getAIPlay } from '../lib/ai';
@@ -25,6 +26,12 @@ export interface DisconnectedPlayer {
   name: string;
 }
 
+/** Someone knocking on a game already in progress, waiting on the host. */
+export interface PendingJoin {
+  clientId: string;
+  name: string;
+}
+
 interface UseMultiplayerReturn {
   role: MultiplayerRole;
   myPlayerId: number | null;
@@ -35,11 +42,21 @@ interface UseMultiplayerReturn {
   wasKicked: boolean;
   disconnectedPlayer: DisconnectedPlayer | null;
   chatMessages: ChatMessage[];
+  /** Host: people asking to join a game already running. */
+  pendingJoins: PendingJoin[];
+  /** Guest: host hasn't decided on my entry yet. */
+  awaitingApproval: boolean;
+  /** Guest: host said no. */
+  joinRejected: boolean;
+  /** Guest: approved, but only deals in from the next round. */
+  seatedNextRound: boolean;
   sendAction: (action: PlayerAction) => void;
   sendChat: (text: string) => void;
   startGame: (roundLimit?: number) => void;
   removeDisconnectedPlayer: () => void;
   kickPlayer: (playerId: number) => void;
+  approveJoin: (clientId: string) => void;
+  rejectJoin: (clientId: string) => void;
   leaveLobby: () => void;
   disconnect: () => void;
 }
@@ -126,6 +143,9 @@ export function useMultiplayer(
   const [wasKicked, setWasKicked] = useState(false);
   const [disconnectedPlayer, setDisconnectedPlayer] = useState<DisconnectedPlayer | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [pendingJoins, setPendingJoins] = useState<PendingJoin[]>([]);
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
+  const [joinRejected, setJoinRejected] = useState(false);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const hostGameRef = useRef<GameState | null>(restoredHost.game);
@@ -151,6 +171,14 @@ export function useMultiplayer(
   const scheduleBotRef = useRef<(gs: GameState) => void>(() => {});
   // Grace timers before a presence-leave counts as a real disconnect
   const disconnectTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  // Host: pending entries + seats approved but not dealt in yet
+  const pendingJoinsRef = useRef<PendingJoin[]>([]);
+  const pendingSeatsRef = useRef<{ id: number; name: string }[]>([]);
+  // Guest: don't time out the join while the host is still deciding
+  const awaitingApprovalRef = useRef(false);
+
+  useEffect(() => { pendingJoinsRef.current = pendingJoins; }, [pendingJoins]);
+  useEffect(() => { awaitingApprovalRef.current = awaitingApproval; }, [awaitingApproval]);
 
   useEffect(() => { lobbyPlayersRef.current = lobbyPlayers; }, [lobbyPlayers]);
   useEffect(() => { myPlayerIdRef.current = myPlayerId; }, [myPlayerId]);
@@ -251,6 +279,11 @@ export function useMultiplayer(
       const activeHumans = getActivePlayers(gs.players).filter((p) => p.isHuman);
       if (pendingNextRoundRef.current.size >= activeHumans.length) {
         pendingNextRoundRef.current.clear();
+        // Latecomers the host approved only ever get dealt in here, between rounds.
+        if (pendingSeatsRef.current.length) {
+          gs = seatNewcomers(gs, pendingSeatsRef.current);
+          pendingSeatsRef.current = [];
+        }
         gs = advanceToNextRound(gs);
       } else {
         return;
@@ -344,27 +377,76 @@ export function useMultiplayer(
             return;
           }
 
-          const dp = disconnectedPlayerRef.current;
-          let playerId: number;
+          const gs = hostGameRef.current;
+          const gameOn = !!gs && gs.phase !== 'setup' && gs.phase !== 'game-end';
 
-          if (dp && dp.name === name) {
-            // Player is reconnecting from a new session — restore their seat
-            playerId = dp.id;
-            cancelDisconnectTimer(playerId);
-            clearDisconnected(playerId);
-          } else {
-            playerId = nextPlayerIdRef.current++;
-            const updated = [...lobbyPlayersRef.current, { id: playerId, name }];
-            lobbyPlayersRef.current = updated;
-            setLobbyPlayers(updated);
-            lobbySeqRef.current++;
-            broadcastLobby(updated);
-            persistHostLobby();
+          // Reconnect: someone typing the room code again from a fresh session
+          // (new tab, phone died, storage cleared) still owns their seat, so
+          // match them back onto it by name instead of minting a new player.
+          const seat = gs?.players.find((p) => p.name === name && !p.eliminated);
+          if (gameOn && seat) {
+            clientPlayerMapRef.current.set(joinerId, seat.id);
+            cancelDisconnectTimer(seat.id);
+            clearDisconnected(seat.id);
+            if (!lobbyPlayersRef.current.some((lp) => lp.id === seat.id)) {
+              const back = [...lobbyPlayersRef.current, { id: seat.id, name }].sort((a, b) => a.id - b.id);
+              lobbyPlayersRef.current = back;
+              setLobbyPlayers(back);
+              lobbySeqRef.current++;
+              broadcastLobby(back);
+              persistHostLobby();
+            }
+            send('welcome', { clientId: joinerId, playerId: seat.id });
+            broadcastState(gs!);
+            return;
           }
+
+          const dp = disconnectedPlayerRef.current;
+          if (dp && dp.name === name) {
+            // Dropped before the deal — restore their seat as-is.
+            cancelDisconnectTimer(dp.id);
+            clearDisconnected(dp.id);
+            clientPlayerMapRef.current.set(joinerId, dp.id);
+            send('welcome', { clientId: joinerId, playerId: dp.id });
+            if (hostGameRef.current) broadcastState(hostGameRef.current);
+            return;
+          }
+
+          // Brand-new face while a game is running — the host decides, and they
+          // only get dealt in from the next round.
+          if (gameOn) {
+            setPendingJoins((prev) =>
+              prev.some((p) => p.clientId === joinerId) ? prev : [...prev, { clientId: joinerId, name }]
+            );
+            send('join_pending', { clientId: joinerId });
+            return;
+          }
+
+          // Lobby phase — anyone can take a seat.
+          const playerId = nextPlayerIdRef.current++;
+          const updated = [...lobbyPlayersRef.current, { id: playerId, name }];
+          lobbyPlayersRef.current = updated;
+          setLobbyPlayers(updated);
+          lobbySeqRef.current++;
+          broadcastLobby(updated);
+          persistHostLobby();
 
           clientPlayerMapRef.current.set(joinerId, playerId);
           send('welcome', { clientId: joinerId, playerId });
           if (hostGameRef.current) broadcastState(hostGameRef.current);
+        })
+        .on('broadcast', { event: 'join_pending' }, ({ payload }) => {
+          if (isHost) return;
+          if ((payload as { clientId: string }).clientId === clientIdRef.current) {
+            setAwaitingApproval(true);
+          }
+        })
+        .on('broadcast', { event: 'join_rejected' }, ({ payload }) => {
+          if (isHost) return;
+          if ((payload as { clientId: string }).clientId === clientIdRef.current) {
+            setAwaitingApproval(false);
+            setJoinRejected(true);
+          }
         })
         .on('broadcast', { event: 'welcome' }, ({ payload }) => {
           if (isHost) return;
@@ -372,6 +454,8 @@ export function useMultiplayer(
           if (targetClient === clientIdRef.current) {
             myPlayerIdRef.current = playerId;
             setMyPlayerId(playerId);
+            setAwaitingApproval(false);
+            setJoinRejected(false);
             try { sessionStorage.setItem(pidKey, String(playerId)); } catch { /* best-effort */ }
             clearJoinTimers();
             channel.track({ playerId, name: playerName });
@@ -545,7 +629,8 @@ export function useMultiplayer(
               if (timeoutId) clearTimeout(timeoutId);
               timeoutId = setTimeout(() => {
                 if (retryInterval) clearInterval(retryInterval);
-                if (myPlayerIdRef.current === null) {
+                // Waiting on the host to wave us in is not a failure to connect.
+                if (myPlayerIdRef.current === null && !awaitingApprovalRef.current) {
                   setError('Não foi possível entrar na sala. Verifique se o código está correto e o host está online.');
                 }
               }, 30000);
@@ -745,6 +830,36 @@ export function useMultiplayer(
     commitHostState(gs);
   }, [isHost, broadcastLobby, commitHostState, persistHostLobby, cancelDisconnectTimer, send]);
 
+  // Host waves in someone who showed up mid-game. They get a seat and a hand
+  // only when the next round is dealt.
+  const approveJoin = useCallback((joinerClientId: string) => {
+    if (!isHost) return;
+    const pending = pendingJoinsRef.current.find((p) => p.clientId === joinerClientId);
+    if (!pending) return;
+
+    const playerId = nextPlayerIdRef.current++;
+    clientPlayerMapRef.current.set(joinerClientId, playerId);
+
+    const updated = [...lobbyPlayersRef.current, { id: playerId, name: pending.name }];
+    lobbyPlayersRef.current = updated;
+    setLobbyPlayers(updated);
+    lobbySeqRef.current++;
+    broadcastLobby(updated);
+    persistHostLobby();
+
+    pendingSeatsRef.current = [...pendingSeatsRef.current, { id: playerId, name: pending.name }];
+    setPendingJoins((prev) => prev.filter((p) => p.clientId !== joinerClientId));
+
+    send('welcome', { clientId: joinerClientId, playerId });
+    if (hostGameRef.current) broadcastState(hostGameRef.current);
+  }, [isHost, broadcastLobby, broadcastState, persistHostLobby, send]);
+
+  const rejectJoin = useCallback((joinerClientId: string) => {
+    if (!isHost) return;
+    send('join_rejected', { clientId: joinerClientId });
+    setPendingJoins((prev) => prev.filter((p) => p.clientId !== joinerClientId));
+  }, [isHost, send]);
+
   // Guest leaves the lobby voluntarily — tell the host to free the seat.
   const leaveLobby = useCallback(() => {
     if (myPlayerIdRef.current !== null) {
@@ -767,11 +882,22 @@ export function useMultiplayer(
     wasKicked,
     disconnectedPlayer,
     chatMessages,
+    pendingJoins,
+    awaitingApproval,
+    joinRejected,
+    // Approved mid-game: we hold a seat but the deal only reaches us next round.
+    seatedNextRound:
+      myPlayerId !== null &&
+      !!gameState &&
+      gameState.phase !== 'game-end' &&
+      !gameState.players.some((p) => p.id === myPlayerId),
     sendAction,
     sendChat,
     startGame,
     removeDisconnectedPlayer,
     kickPlayer,
+    approveJoin,
+    rejectJoin,
     leaveLobby,
     disconnect,
   };

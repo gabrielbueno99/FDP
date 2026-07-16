@@ -173,6 +173,37 @@ export default function SalaPage({ params }: PageProps) {
     );
   }
 
+  // Guest knocking on a running game — the host decides.
+  if (mp.awaitingApproval || mp.joinRejected) {
+    return (
+      <div className="min-h-screen lobby-bg flex flex-col items-center justify-center p-7">
+        <div className="flex gap-3.5 text-gold text-[15px] tracking-[6px]">♣ ♥ ♠ ♦</div>
+        <h1 className="font-display text-cream text-6xl leading-none mt-4">FDP</h1>
+        <div className="text-center mt-9 flex flex-col gap-2 max-w-sm">
+          <span className="font-display text-cream text-3xl leading-tight">
+            {mp.joinRejected ? 'O anfitrião recusou.' : 'A partida já começou.'}
+          </span>
+          <span className="font-display italic text-gold text-[15px]">
+            {mp.joinRejected
+              ? 'talvez na próxima mesa'
+              : 'pedimos pro anfitrião te deixar entrar…'}
+          </span>
+          {!mp.joinRejected && (
+            <span className="text-cream/50 text-[13px] mt-1">
+              Se ele liberar, você entra no começo da próxima rodada.
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => router.push('/')}
+          className="w-full max-w-sm h-13 rounded-xl border border-gold/45 text-cream font-semibold text-[15px] mt-9 transition-all hover:bg-white/[0.04] active:scale-95"
+        >
+          Voltar ao início
+        </button>
+      </div>
+    );
+  }
+
   if (mp.error) {
     return (
       <div className="min-h-screen lobby-bg flex items-center justify-center p-7">
@@ -230,6 +261,44 @@ export default function SalaPage({ params }: PageProps) {
           onRestart={() => router.push('/')}
           isMultiplayer
         />
+
+        {/* Host: someone wants in mid-game */}
+        {mp.pendingJoins.length > 0 && isHost && (
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2">
+            {mp.pendingJoins.map((j) => (
+              <div
+                key={j.clientId}
+                className="flex items-center gap-3 bg-black/85 border border-gold/45 rounded-2xl px-4 py-2.5 shadow-2xl backdrop-blur-md"
+              >
+                <span className="text-cream text-sm">
+                  <span className="font-semibold text-gold">{j.name}</span> quer entrar
+                </span>
+                <button
+                  onClick={() => mp.approveJoin(j.clientId)}
+                  className="btn-gold h-8 px-3 rounded-lg text-[12.5px] font-bold transition-all hover:brightness-110 active:scale-95"
+                >
+                  Deixar entrar
+                </button>
+                <button
+                  onClick={() => mp.rejectJoin(j.clientId)}
+                  className="h-8 px-3 rounded-lg border border-danger/45 text-danger/80 hover:text-danger text-[12.5px] font-semibold transition-all active:scale-95"
+                >
+                  Recusar
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Approved mid-game — no hand until the next deal */}
+        {mp.seatedNextRound && (
+          <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 bg-black/85 border border-gold/40 rounded-full px-4 py-2 shadow-xl backdrop-blur-md">
+            <span className="font-display italic text-gold text-sm">
+              você entra no começo da próxima rodada…
+            </span>
+          </div>
+        )}
+
         {mp.disconnectedPlayer && (
           <DisconnectOverlay
             player={mp.disconnectedPlayer}
