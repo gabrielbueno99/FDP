@@ -1,5 +1,5 @@
-import { GameState, Player, PlayedCard, RoundResult } from './types';
-import { createDeck, getManilhaValue, getTrickWinnerId, shuffle } from './deck';
+import { GameState, Player, PlayedCard, RoundResult, Value } from './types';
+import { createDeck, getCardStrength, getManilhaValue, getTrickWinnerId, shuffle } from './deck';
 
 export function getActivePlayers(players: Player[]): Player[] {
   return players.filter((p) => !p.eliminated);
@@ -65,6 +65,27 @@ export function isLastBidder(state: GameState, playerId: number): boolean {
   const dealerIdx = active.findIndex((p) => p.id === state.dealerPlayerId);
   // Dealer bids last
   return active[dealerIdx].id === playerId;
+}
+
+// Seconds a player has before the table plays for them.
+export const TURN_SECONDS = 15;
+
+// The weakest card in a hand — what we auto-play when someone's clock runs out.
+export function weakestCardId(player: Player, manilhaValue: Value | null): string | null {
+  if (!player.hand.length) return null;
+  if (!manilhaValue) return player.hand[0].id;
+  return [...player.hand].sort(
+    (a, b) => getCardStrength(a, manilhaValue) - getCardStrength(b, manilhaValue)
+  )[0].id;
+}
+
+// The lowest bid a player is allowed to make (0, unless the dealer is forced off it).
+export function lowestAllowedBid(state: GameState, playerId: number): number {
+  const forbidden = state.dealerPlayerId === playerId ? getForbiddenBid(state) : null;
+  for (let b = 0; b <= state.round; b++) {
+    if (b !== forbidden) return b;
+  }
+  return 0;
 }
 
 export function getForbiddenBid(state: GameState): number | null {

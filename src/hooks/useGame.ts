@@ -9,7 +9,10 @@ import {
   getActivePlayers,
   initGame,
   isLastBidder,
+  lowestAllowedBid,
   startNextTrick,
+  TURN_SECONDS,
+  weakestCardId,
 } from '../lib/game';
 import { getAIBid, getAIPlay } from '../lib/ai';
 
@@ -166,6 +169,31 @@ export function useGame(options: UseGameOptions = {}) {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [state.phase, state.currentBidderId, state.currentPlayerId, externalState, noAI]);
+
+  // Solo turn clock: if the human dawdles past TURN_SECONDS, the table plays
+  // their weakest card (or lowest legal bid) so the game keeps moving.
+  useEffect(() => {
+    if (externalState) return; // online is enforced host-side
+    const { phase, currentBidderId, currentPlayerId } = state;
+    const myBid = phase === 'bidding' && currentBidderId === humanId;
+    const myPlay = phase === 'playing' && currentPlayerId === humanId;
+    if (!myBid && !myPlay) return;
+
+    const t = setTimeout(() => {
+      setInternalState((prev) => {
+        if (prev.phase === 'bidding' && prev.currentBidderId === humanId) {
+          return applyBid(prev, humanId, lowestAllowedBid(prev, humanId));
+        }
+        if (prev.phase === 'playing' && prev.currentPlayerId === humanId) {
+          const me = prev.players.find((p) => p.id === humanId);
+          const cardId = me && weakestCardId(me, prev.manilhaValue);
+          if (cardId) return applyCardPlay(prev, humanId, cardId);
+        }
+        return prev;
+      });
+    }, TURN_SECONDS * 1000);
+    return () => clearTimeout(t);
+  }, [state.phase, state.currentBidderId, state.currentPlayerId, humanId, externalState]);
 
   const forbiddenBid = state.phase === 'bidding' ? getForbiddenBid(state) : null;
   const activePlayers = getActivePlayers(state.players);

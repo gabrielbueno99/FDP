@@ -7,6 +7,7 @@ import { TrickArea } from './TrickArea';
 import { BidPanel } from './BidPanel';
 import { RoundSummary } from './RoundSummary';
 import { SoundToggle } from './SoundToggle';
+import { TurnTimer } from './TurnTimer';
 import { useGameSounds } from '../hooks/useGameSounds';
 
 interface GameBoardProps {
@@ -234,6 +235,12 @@ export function GameBoard({
     </span>
   );
 
+  // Countdown shown while it's the local player's move; resets each turn.
+  const turnKey = phase === 'bidding' ? `b-${round}-${currentBidderId}` : `p-${round}-${currentPlayerId}`;
+  const turnTimer = isMyTurn && (phase === 'bidding' || phase === 'playing')
+    ? <TurnTimer key={turnKey} warnSound />
+    : null;
+
   const exitButton = (
     <button
       onClick={() => setConfirmExit(true)}
@@ -377,6 +384,7 @@ export function GameBoard({
                 />
 
                 <div className="flex flex-col gap-2.5 items-center mb-3.5 w-64">
+                  {turnTimer}
                   {phase === 'bidding' && isMyTurn ? (
                     <BidPanel
                       cardsInRound={round}
@@ -456,6 +464,7 @@ export function GameBoard({
 
       {/* Your hand */}
       <div className="shrink-0 px-4 pb-4 pt-1 max-w-lg mx-auto w-full flex flex-col gap-2.5">
+        {turnTimer && <div className="flex justify-center">{turnTimer}</div>}
         {humanPlayer && (
           <PlayerArea
             player={humanPlayer}

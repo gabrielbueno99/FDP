@@ -10,9 +10,12 @@ import {
   getActivePlayers,
   initGame,
   isLastBidder,
+  lowestAllowedBid,
   normalizeTurn,
   seatNewcomers,
   startNextTrick,
+  TURN_SECONDS,
+  weakestCardId,
 } from '../lib/game';
 import { getAIBid, getAIPlay } from '../lib/ai';
 
@@ -318,48 +321,46 @@ export function useMultiplayer(
     commitHostState(gs);
   }, [commitHostState]);
 
-  // Host-side AI: when the current bidder/player is a bot, act after a delay.
+  // Host clock: bots act after a short delay; human players get the full
+  // TURN_SECONDS before the table plays their weakest card / lowest bid, so an
+  // AFK or dropped player never freezes the game.
   const scheduleBot = useCallback((gs: GameState) => {
     if (!isHost) return;
     if (botTimerRef.current) clearTimeout(botTimerRef.current);
 
     if (gs.phase === 'bidding') {
       const bidder = gs.players.find((p) => p.id === gs.currentBidderId);
-      if (bidder && !bidder.isHuman && !bidder.eliminated) {
-        botTimerRef.current = setTimeout(() => {
-          const cur = hostGameRef.current;
-          if (!cur || cur.phase !== 'bidding' || cur.currentBidderId !== bidder.id) return;
-          const active = getActivePlayers(cur.players);
-          const existingBids = active.filter((p) => p.bid !== null).map((p) => p.bid!);
-          const curBidder = cur.players.find((p) => p.id === bidder.id)!;
-          const bid = getAIBid(
-            curBidder.hand,
-            cur.manilhaValue!,
-            existingBids,
-            cur.round,
-            isLastBidder(cur, bidder.id)
-          );
-          applyHostAction({ type: 'bid', value: bid }, bidder.id);
-        }, 800);
-      }
+      if (!bidder || bidder.eliminated) return;
+      const delay = bidder.isHuman ? TURN_SECONDS * 1000 : 800;
+      botTimerRef.current = setTimeout(() => {
+        const cur = hostGameRef.current;
+        if (!cur || cur.phase !== 'bidding' || cur.currentBidderId !== bidder.id) return;
+        const curBidder = cur.players.find((p) => p.id === bidder.id)!;
+        const value = bidder.isHuman
+          ? lowestAllowedBid(cur, bidder.id)
+          : getAIBid(
+              curBidder.hand,
+              cur.manilhaValue!,
+              getActivePlayers(cur.players).filter((p) => p.bid !== null).map((p) => p.bid!),
+              cur.round,
+              isLastBidder(cur, bidder.id)
+            );
+        applyHostAction({ type: 'bid', value }, bidder.id);
+      }, delay);
     } else if (gs.phase === 'playing') {
       const player = gs.players.find((p) => p.id === gs.currentPlayerId);
-      if (player && !player.isHuman && !player.eliminated) {
-        botTimerRef.current = setTimeout(() => {
-          const cur = hostGameRef.current;
-          if (!cur || cur.phase !== 'playing' || cur.currentPlayerId !== player.id) return;
-          const curPlayer = cur.players.find((p) => p.id === player.id)!;
-          if (curPlayer.hand.length === 0) return;
-          const card = getAIPlay(
-            curPlayer.hand,
-            cur.currentTrick,
-            cur.manilhaValue!,
-            curPlayer.bid ?? 0,
-            curPlayer.tricksWon
-          );
-          applyHostAction({ type: 'play', cardId: card.id }, player.id);
-        }, 1000);
-      }
+      if (!player || player.eliminated) return;
+      const delay = player.isHuman ? TURN_SECONDS * 1000 : 1000;
+      botTimerRef.current = setTimeout(() => {
+        const cur = hostGameRef.current;
+        if (!cur || cur.phase !== 'playing' || cur.currentPlayerId !== player.id) return;
+        const curPlayer = cur.players.find((p) => p.id === player.id)!;
+        if (curPlayer.hand.length === 0) return;
+        const cardId = player.isHuman
+          ? weakestCardId(curPlayer, cur.manilhaValue)
+          : getAIPlay(curPlayer.hand, cur.currentTrick, cur.manilhaValue!, curPlayer.bid ?? 0, curPlayer.tricksWon).id;
+        if (cardId) applyHostAction({ type: 'play', cardId }, player.id);
+      }, delay);
     }
   }, [isHost, applyHostAction]);
 

@@ -20,20 +20,50 @@ const TAUNTS = [
   'FDP!',
 ];
 
+// Anti-spam: more than BURST messages inside WINDOW_MS earns a COOLDOWN_MS lock.
+const BURST = 5;
+const WINDOW_MS = 8000;
+const COOLDOWN_MS = 15000;
+
 export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
   const [input, setInput] = useState('');
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+  const sentTimesRef = useRef<number[]>([]);
+  const cooldownUntilRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
+  // Tick the visible cooldown countdown while it's active.
+  useEffect(() => {
+    if (cooldownLeft <= 0) return;
+    const id = setInterval(() => {
+      const left = Math.ceil((cooldownUntilRef.current - Date.now()) / 1000);
+      setCooldownLeft(left > 0 ? left : 0);
+    }, 250);
+    return () => clearInterval(id);
+  }, [cooldownLeft]);
+
   const submit = () => {
+    if (Date.now() < cooldownUntilRef.current) return;
     const text = input.trim();
     if (!text) return;
+
+    const now = Date.now();
+    sentTimesRef.current = [...sentTimesRef.current.filter((t) => now - t < WINDOW_MS), now];
+    if (sentTimesRef.current.length > BURST) {
+      cooldownUntilRef.current = now + COOLDOWN_MS;
+      sentTimesRef.current = [];
+      setCooldownLeft(Math.ceil(COOLDOWN_MS / 1000));
+    }
+
     onSend(text);
     setInput('');
   };
+
+  const onCooldown = cooldownLeft > 0;
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -83,13 +113,14 @@ export function ChatPanel({ messages, myPlayerId, onSend }: ChatPanelProps) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="Mensagem…"
+          placeholder={onCooldown ? `Calma… espere ${cooldownLeft}s` : 'Mensagem…'}
           maxLength={200}
-          className="flex-1 h-[38px] bg-white/5 border border-white/10 text-cream rounded-[10px] px-3 text-[13px] outline-none focus:border-gold/60 transition-colors placeholder:text-cream/35"
+          disabled={onCooldown}
+          className="flex-1 h-[38px] bg-white/5 border border-white/10 text-cream rounded-[10px] px-3 text-[13px] outline-none focus:border-gold/60 transition-colors placeholder:text-cream/35 disabled:opacity-60"
         />
         <button
           onClick={submit}
-          disabled={!input.trim()}
+          disabled={!input.trim() || onCooldown}
           className="btn-gold w-[38px] h-[38px] rounded-[10px] font-bold text-base transition-all hover:brightness-110 disabled:opacity-40"
         >
           ↑
