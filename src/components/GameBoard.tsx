@@ -6,9 +6,11 @@ import { Dots, PlayerArea } from './PlayerArea';
 import { TrickArea } from './TrickArea';
 import { BidPanel } from './BidPanel';
 import { RoundSummary } from './RoundSummary';
+import { MusicToggle } from './MusicToggle';
 import { SoundToggle } from './SoundToggle';
 import { TurnTimer } from './TurnTimer';
 import { useGameSounds } from '../hooks/useGameSounds';
+import { resumeMusicIfEnabled } from '../lib/music';
 
 interface GameBoardProps {
   state: GameState;
@@ -67,6 +69,7 @@ export function GameBoard({
   }, []);
 
   useGameSounds(state, humanId, isMyTurn);
+  useEffect(() => { resumeMusicIfEnabled(); }, []);
 
   // Card ids are stable across rounds, so a stale selection would carry over —
   // reset it whenever the round or phase changes (adjust-state-during-render).
@@ -313,6 +316,7 @@ export function GameBoard({
           <div className="flex items-center gap-5">
             <span className="text-cream/60 text-[13px] tracking-[2px]">{roundLabel}</span>
             {tentoPill}
+            <MusicToggle />
             <SoundToggle />
           </div>
         </div>
@@ -434,6 +438,7 @@ export function GameBoard({
         <div className="flex items-center gap-2">
           <span className="text-cream/60 text-xs tracking-[1px]">{roundLabel}</span>
           {tentoPill}
+          <MusicToggle />
           <SoundToggle />
         </div>
       </div>
