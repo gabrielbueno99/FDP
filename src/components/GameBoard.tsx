@@ -6,6 +6,8 @@ import { Dots, PlayerArea } from './PlayerArea';
 import { TrickArea } from './TrickArea';
 import { BidPanel } from './BidPanel';
 import { RoundSummary } from './RoundSummary';
+import { SoundToggle } from './SoundToggle';
+import { useGameSounds } from '../hooks/useGameSounds';
 
 interface GameBoardProps {
   state: GameState;
@@ -62,6 +64,8 @@ export function GameBoard({
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
+
+  useGameSounds(state, humanId, isMyTurn);
 
   // Card ids are stable across rounds, so a stale selection would carry over —
   // reset it whenever the round or phase changes (adjust-state-during-render).
@@ -302,6 +306,7 @@ export function GameBoard({
           <div className="flex items-center gap-5">
             <span className="text-cream/60 text-[13px] tracking-[2px]">{roundLabel}</span>
             {tentoPill}
+            <SoundToggle />
           </div>
         </div>
 
@@ -421,6 +426,7 @@ export function GameBoard({
         <div className="flex items-center gap-2">
           <span className="text-cream/60 text-xs tracking-[1px]">{roundLabel}</span>
           {tentoPill}
+          <SoundToggle />
         </div>
       </div>
 

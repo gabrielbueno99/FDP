@@ -9,6 +9,7 @@ import { DisconnectOverlay } from '../../../components/DisconnectOverlay';
 import { ChatPanel } from '../../../components/ChatPanel';
 import { avatarColor, initials } from '../../../components/PlayerArea';
 import { ChatMessage } from '../../../lib/types';
+import { playSound } from '../../../lib/sounds';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -35,9 +36,14 @@ function ChatWidget({ messages, myPlayerId, onSend }: ChatWidgetProps) {
 
   useEffect(() => {
     const n = messages.length;
-    if (n > prevCount.current && !open) setUnread((u) => u + (n - prevCount.current));
+    if (n > prevCount.current) {
+      if (!open) setUnread((u) => u + (n - prevCount.current));
+      // Only chime for messages from others, not your own.
+      const last = messages[n - 1];
+      if (last && last.playerId !== myPlayerId) playSound('chat');
+    }
     prevCount.current = n;
-  }, [messages.length, open]);
+  }, [messages.length, open, messages, myPlayerId]);
 
   return (
     <div className="fixed bottom-4 right-3 z-40 flex flex-col items-end gap-2">
