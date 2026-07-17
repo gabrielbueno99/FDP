@@ -37,6 +37,8 @@ export function CardComponent({ card, isManilha, isWinning, selected, clickable,
     size === 'xs' ? 'text-[9px]' : size === 'sm' ? 'text-xs' : size === 'md' ? 'text-base' : size === 'lg' ? 'text-lg' : 'text-[21px]';
   const centerSym = size === 'md' ? 'text-3xl' : size === 'lg' ? 'text-4xl' : 'text-5xl';
 
+  const badge = size === 'xs' ? 'hidden' : size === 'sm' ? 'text-[6px] px-1 -top-1.5' : 'text-[7px] px-1.5 -top-2';
+
   return (
     <div
       onClick={clickable ? onClick : undefined}
@@ -44,13 +46,24 @@ export function CardComponent({ card, isManilha, isWinning, selected, clickable,
         'relative bg-card border select-none flex flex-col transition-all duration-150',
         padding,
         DIMS[size],
-        selected || isManilha || isWinning
-          ? 'border-transparent outline-2 outline-gold shadow-[0_10px_26px_rgba(0,0,0,0.55)]'
-          : 'border-black/10 shadow-[0_6px_18px_rgba(0,0,0,0.45)]',
+        // Manilha gets its own unmistakable look — a warm gold glow — so it never
+        // reads as merely "selected".
+        isManilha
+          ? 'border-transparent outline-2 outline-gold shadow-[0_0_0_2px_rgba(201,165,90,0.55),0_0_22px_6px_rgba(201,165,90,0.45),0_10px_26px_rgba(0,0,0,0.55)] -translate-y-0.5'
+          : selected || isWinning
+            ? 'border-transparent outline-2 outline-gold shadow-[0_10px_26px_rgba(0,0,0,0.55)]'
+            : 'border-black/10 shadow-[0_6px_18px_rgba(0,0,0,0.45)]',
         clickable ? 'cursor-pointer hover:-translate-y-2 hover:shadow-2xl hover:shadow-black/60 hover:z-10' : '',
         dimmed ? 'opacity-55' : '',
       ].join(' ')}
     >
+      {isManilha && (
+        <span
+          className={`absolute right-1 ${badge} bg-gold text-ink font-bold tracking-[1px] rounded-full leading-[1.5] shadow`}
+        >
+          MANILHA
+        </span>
+      )}
       <span className={`font-display leading-none ${color} ${rankText}`}>{card.value}</span>
       <span className={`leading-none ${color} ${suitText}`}>{sym}</span>
       {(size === 'md' || size === 'lg' || size === 'xl') && (

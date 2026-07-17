@@ -284,9 +284,13 @@ export function GameBoard({
     />
   );
 
+  // Eliminated players hold no seat at the table — they'd otherwise land on
+  // relIdx -1 and stack on top of a living player's pod. Show the living ones.
+  const tableOpponents = activePlayers.filter((p) => p.id !== humanId);
+
   // ── Landscape — mesa oval cinematográfica (5a/6b) ─────────
   if (isLandscape) {
-    const seats = getLandscapeSeats(players.length);
+    const seats = getLandscapeSeats(activePlayers.length);
     return (
       <div className="h-dvh room-bg flex flex-col select-none overflow-hidden">
         {/* Top bar */}
@@ -317,9 +321,7 @@ export function GameBoard({
           </div>
 
           {/* Opponents around the table */}
-          {players
-            .filter((p) => p.id !== humanId)
-            .map((player) => {
+          {tableOpponents.map((player) => {
               const pIdx   = activePlayers.findIndex((p) => p.id === player.id);
               const relIdx = (pIdx - humanIdx + activePlayers.length) % activePlayers.length;
               const seat   = seats[relIdx];
@@ -424,8 +426,7 @@ export function GameBoard({
 
       {/* Opponent pods */}
       <div className="shrink-0 flex flex-wrap justify-center gap-2 px-3.5 mt-3">
-        {players
-          .filter((p) => p.id !== humanId)
+        {tableOpponents
           .map((player) => (
             <div key={player.id} className="flex-1 min-w-[104px] max-w-[132px]">
               {renderOpponent(player)}

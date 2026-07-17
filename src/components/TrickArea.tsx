@@ -28,12 +28,23 @@ export function TrickArea({ state, showVira = true, status, bigCards }: TrickAre
   return (
     <div className="flex flex-col items-center gap-3.5 w-full py-2">
       {showVira && vira && (
-        <div className={`flex items-center ${bigCards ? 'gap-4' : 'gap-2.5'}`}>
-          <span className={`text-cream/50 tracking-[2px] ${bigCards ? 'text-xs' : 'text-[11px]'}`}>VIRA</span>
-          <CardComponent card={vira} size={bigCards ? 'md' : 'sm'} />
-          <span className={`text-gold font-semibold ${bigCards ? 'text-base' : 'text-xs'}`}>
-            manilha {manilhaValue}
-          </span>
+        <div className={`flex items-center ${bigCards ? 'gap-5' : 'gap-3'}`}>
+          <div className="flex items-center gap-2">
+            <span className={`text-cream/45 tracking-[2px] ${bigCards ? 'text-xs' : 'text-[10px]'}`}>VIRA</span>
+            <CardComponent card={vira} size={bigCards ? 'md' : 'sm'} />
+          </div>
+          {/* The manilha rank is the single most important number on the table. */}
+          <div className="flex flex-col items-center leading-none">
+            <span className={`text-gold/70 uppercase tracking-[3px] ${bigCards ? 'text-[11px]' : 'text-[8px]'}`}>
+              manilha
+            </span>
+            <span
+              className={`font-display text-gold ${bigCards ? 'text-6xl' : 'text-3xl'}`}
+              style={{ textShadow: '0 0 18px rgba(201,165,90,0.55)' }}
+            >
+              {manilhaValue}
+            </span>
+          </div>
         </div>
       )}
 

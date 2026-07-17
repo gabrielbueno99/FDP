@@ -10,6 +10,7 @@ import {
   getActivePlayers,
   initGame,
   isLastBidder,
+  normalizeTurn,
   seatNewcomers,
   startNextTrick,
 } from '../lib/game';
@@ -893,6 +894,10 @@ export function useMultiplayer(
     if (remaining.length <= 1) {
       const winner = remaining[0] ?? [...gs.players].sort((a, b) => b.points - a.points)[0] ?? null;
       gs = { ...gs, phase: 'game-end', winner };
+    } else {
+      // Removing a player can leave the turn pointing at their now-empty seat —
+      // hand it to someone who can actually play.
+      gs = normalizeTurn(gs);
     }
 
     commitHostState(gs);
@@ -946,6 +951,10 @@ export function useMultiplayer(
     if (remaining.length <= 1) {
       const winner = remaining[0] ?? [...gs.players].sort((a, b) => b.points - a.points)[0] ?? null;
       gs = { ...gs, phase: 'game-end', winner };
+    } else {
+      // Removing a player can leave the turn pointing at their now-empty seat —
+      // hand it to someone who can actually play.
+      gs = normalizeTurn(gs);
     }
 
     commitHostState(gs);

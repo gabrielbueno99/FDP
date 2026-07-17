@@ -11,6 +11,55 @@ export function nextActivePlayerId(players: Player[], currentId: number): number
   return active[(idx + 1) % active.length].id;
 }
 
+// The active player at/after `fromId` (in seat order) who still holds cards.
+// Card counts only ever go uneven when someone is eliminated mid-round, which
+// can leave the intended leader with an empty hand — the turn must skip past
+// them instead of freezing on a player who cannot act. Returns null when no
+// active player has cards left (the round is over).
+export function nextActiveWithCards(players: Player[], fromId: number): number | null {
+  const n = players.length;
+  if (!n) return null;
+  const fromIdx = players.findIndex((p) => p.id === fromId);
+  const from = fromIdx === -1 ? -1 : fromIdx;
+  // Walk seats in order starting just after `fromId` (so the turn passes to the
+  // next seat, even when fromId itself was eliminated), then consider fromId last.
+  for (let i = 1; i <= n; i++) {
+    const p = players[(from + i + n) % n];
+    if (!p.eliminated && p.hand.length > 0) return p.id;
+  }
+  return null;
+}
+
+// Keeps whose-turn pointers on someone who can actually act. Called after a
+// player is removed mid-game so the table never gets stuck on an eliminated or
+// cardless seat.
+export function normalizeTurn(state: GameState): GameState {
+  const active = getActivePlayers(state.players);
+  if (active.length <= 1) return state;
+
+  if (state.phase === 'bidding') {
+    if (!active.some((p) => p.id === state.currentBidderId)) {
+      return { ...state, currentBidderId: nextActivePlayerId(state.players, state.currentBidderId) };
+    }
+    return state;
+  }
+
+  if (state.phase === 'playing' || state.phase === 'trick-end') {
+    const cur = active.find((p) => p.id === state.currentPlayerId);
+    if (!cur || cur.hand.length === 0) {
+      const nextId = nextActiveWithCards(state.players, state.currentPlayerId);
+      if (nextId !== null) {
+        return {
+          ...state,
+          currentPlayerId: nextId,
+          trickLeaderId: active.some((p) => p.id === state.trickLeaderId) ? state.trickLeaderId : nextId,
+        };
+      }
+    }
+  }
+  return state;
+}
+
 export function isLastBidder(state: GameState, playerId: number): boolean {
   const active = getActivePlayers(state.players);
   const dealerIdx = active.findIndex((p) => p.id === state.dealerPlayerId);
@@ -155,24 +204,34 @@ export function applyCardPlay(
     return resolveRoundEnd(state, playersAfterTrick, newTrick, winnerId);
   }
 
+  // The winner leads the next trick — unless they just played their last card
+  // (possible when someone was eliminated mid-round and hands went uneven), in
+  // which case the lead passes to the next player who still has cards.
+  const winnerHasCards = playersAfterTrick.find((p) => p.id === winnerId)?.hand.length;
+  const nextLeader = winnerHasCards
+    ? winnerId
+    : nextActiveWithCards(playersAfterTrick, winnerId) ?? winnerId;
+
   return {
     ...state,
     phase: 'trick-end',
     players: playersAfterTrick,
     currentTrick: newTrick,
     trickWinnerId: winnerId,
-    trickLeaderId: winnerId,
-    currentPlayerId: winnerId,
+    trickLeaderId: nextLeader,
+    currentPlayerId: nextLeader,
   };
 }
 
 export function startNextTrick(state: GameState): GameState {
+  const leadId = nextActiveWithCards(state.players, state.trickLeaderId) ?? state.trickLeaderId;
   return {
     ...state,
     phase: 'playing',
     currentTrick: [],
     trickWinnerId: null,
-    currentPlayerId: state.trickLeaderId,
+    trickLeaderId: leadId,
+    currentPlayerId: leadId,
   };
 }
 
